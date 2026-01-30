@@ -1,0 +1,53 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# Core PyTorch stack (CUDA-enabled via cu126)
+torch
+torchvision
+torchaudio
+
+# Diffusers and Transformers
+diffusers==0.25.0
+transformers==4.42.3
+
+# HuggingFace ecosystem
+huggingface-hub==0.23.4
+accelerate==0.25.0
+
+# DeepSpeed (Python 3.11 compatible)
+deepspeed==0.12.6
+
+# Image/Video processing
+# decord==0.6.0
+opencv-python==4.8.0.74
+imageio==2.33.0
+imageio-ffmpeg==0.4.9
+
+# Core numerical and scientific
+# Compatible with: mediapipe (numpy<2), scipy 1.11.4 (numpy<1.28,>=1.21.6),
+# transformers 4.42.3 (numpy<2.0,>=1.17)
+numpy==1.26.4
+scipy==1.11.4
+einops==0.7.0
+
+# Configuration and utilities
+omegaconf==2.3.0
+tqdm==4.65.0
+ftfy==6.2.0
+
+# Compatible with gradio 4.37.2 (pillow<11)
+pillow==10.4.0
+
+# LoRA and optimization
+lora-diffusion @ git+https://github.com/cloneofsimo/lora.git@bdd51b04c49fa90a88919a19850ec3b4cf3c5ecd
+loralib==0.1.0
+bitsandbytes==0.41.1
+# xformers==0.0.23  ### install after installing the rest, if needed
+
+# Monitoring, logging, and UI
+tensorboard==2.14.0
+wandb==0.16.0
+gradio==4.37.2
+seaborn==0.13.0
+fire==0.5.0
+protobuf==4.25.3
+tokenizers==0.19.1
