@@ -1667,7 +1667,7 @@ def main(args):
         repeats=args.repeats,
         center_crop=args.center_crop,
         one_shot=args.with_one_shot, 
-        num_frames=num_frames
+        num_frames=args.num_frames
     )
 
     train_dataloader = torch.utils.data.DataLoader(
