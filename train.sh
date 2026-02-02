@@ -10,31 +10,36 @@ export STYLE_LR=0.00005
 export weight_lr=0.005
 export similarity_lambda=0.5
 export RANK=64
+
 export WANDB_NAME="unziplora"
 export WANDB_MODE="offline"
-export INSTANCE_DIR="instance_data/sketch_cat"
-export OUTPUT_DIR="models/sketch_cat/sketch_cat"
+
+export NUM_FRAMES=16  # Number of frames to sample per video
+export RESOLUTION=512  # Lower resolution for video (memory)
+
+export INSTANCE_DIR="instance_videos/male_biker"
+export OUTPUT_DIR="models/instance_videos/male_biker"
 export STEPS=600
 
 # Training prompt
-export PROMPT="A monadikos cat in sketch style"
-export CONTENT_FORWARD_PROMPT="A monadikos cat"
-export STYLE_FORWARD_PROMPT="A cat in sketch style"
+export PROMPT="A male biker in cartoon style biking on the street"
+export CONTENT_FORWARD_PROMPT="A male biker"
+export STYLE_FORWARD_PROMPT="A biker in cartoon style"
 # For validation
-export VALID_CONTENT="A monadikos cat on a table"
-export VALID_PROMPT="A monadikos cat on a table in sketch style"
-export VALID_STYLE="A cat in sketch style on a table"
+export VALID_CONTENT="A male biker biking on a park"
+export VALID_PROMPT="A male biker in cartoon style biking on a park"
+export VALID_STYLE="A biker in cartoon style biking on a park"
 
 # for content validation
-export VALID_CONTENT_PROMPT="a photo of a monadikos cat on a table"
+export VALID_CONTENT_PROMPT="a video of a biker in park"
 
 # for style validation
-export VALID_STYLE_PROMPT="A dog in sketch style"
+export VALID_STYLE_PROMPT="A biker in cartoon style"
 
 
 
 accelerate launch train_unziplora.py \
-  --pretrained_model_name_or_path=$MODEL_NAME  \
+  --pretrained_model_name_or_path=$MODEL_NAME \
   --name=$WANDB_NAME \
   --instance_data_dir=$INSTANCE_DIR \
   --output_dir=$OUTPUT_DIR \
@@ -42,7 +47,8 @@ accelerate launch train_unziplora.py \
   --content_forward_prompt="${CONTENT_FORWARD_PROMPT}" \
   --style_forward_prompt="${STYLE_FORWARD_PROMPT}" \
   --rank="${RANK}" \
-  --resolution=1024 \
+  --resolution=$RESOLUTION \
+  --num_frames=$NUM_FRAMES \
   --train_batch_size=1 \
   --content_learning_rate="${CONTENT_LR}" \
   --style_learning_rate="${STYLE_LR}" \

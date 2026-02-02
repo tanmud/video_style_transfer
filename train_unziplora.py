@@ -401,6 +401,12 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+    "--num_frames",
+    type=int,
+    default=16,
+    help="Number of frames to sample per video for training",
+    )
+    parser.add_argument(
         "--crops_coords_top_left_h",
         type=int,
         default=0,
@@ -848,7 +854,7 @@ def parse_args(input_args=None):
 class DreamBoothDataset(Dataset):
     """
     A dataset to prepare the instance and class images with the prompts for fine-tuning the model.
-    It pre-processes the images.
+    It pre-processes the images and loads video frames.
     """
 
     def __init__(
@@ -864,38 +870,65 @@ class DreamBoothDataset(Dataset):
         size=1024,
         repeats=1,
         center_crop=False,
-        one_shot=False,
+        oneshot=False,
+        num_frames=16,
     ):
         self.size = size
         self.center_crop = center_crop
-
+        self.num_frames = num_frames
         self.instance_prompt = instance_prompt
         self.custom_instance_prompts = None
         self.class_prompt = class_prompt
         self.custom_instance_prompts_2 = None
         self.class_prompt_2 = class_prompt_2
-        # if --dataset_name is provided or a metadata jsonl file is provided in the local --instance_data directory,
-        # we load the training data using load_dataset(if the training dataset is an "cashed dataset")
-        if args.dataset_name is not None:
-            raise NotImplementedError
-        else:
-            self.instance_data_root = Path(instance_data_root)
-            if not self.instance_data_root.exists():
-                raise ValueError("Instance images root doesn't exists.")
-            instance_images = [
-                Image.open(path) for path in list(Path(instance_data_root).iterdir())
-            ]
-            if one_shot is True: 
-                selected_image = random.choice(instance_images)
-                instance_images = [selected_image]
-                print(selected_image)
-            self.custom_instance_prompts = None
 
+        self.instance_data_root = Path(instance_data_root)
+        if not self.instance_data_root.exists():
+            raise ValueError("Instance images root doesn't exists.")
+
+        # Load video frames
+        import cv2
+        
+        instance_videos = []
+        video_paths = list(Path(instance_data_root).glob("*.mp4")) + list(Path(instance_data_root).glob("*.avi"))
+        
+        if video_paths:  # Video files mode
+            for video_path in video_paths:
+                cap = cv2.VideoCapture(str(video_path))
+                frames = []
+                for _ in range(num_frames):
+                    ret, frame = cap.read()
+                    if ret:
+                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        frames.append(Image.fromarray(frame_rgb))
+                    else:
+                        break
+                cap.release()
+                if len(frames) == num_frames:
+                    instance_videos.append(frames)
+        else:  # Frame folders mode
+            video_folders = [d for d in Path(instance_data_root).iterdir() if d.is_dir()]
+            for folder in video_folders:
+                frame_paths = sorted(folder.glob("*.jpg")) + sorted(folder.glob("*.png"))
+                frame_paths = frame_paths[:num_frames]
+                if len(frame_paths) == num_frames:
+                    frames = [Image.open(p) for p in frame_paths]
+                    instance_videos.append(frames)
+
+        if oneshot is True:
+            selected_video = random.choice(instance_videos)
+            instance_videos = [selected_video]
+            print(f"Selected video with {len(selected_video)} frames")
+
+        self.custom_instance_prompts = None
+
+        # Store as list of frame sequences
         self.instance_images = []
         self.style_vector = []
         self.content_vector = []
-        for img in instance_images:
-            self.instance_images.extend(itertools.repeat(img, repeats))
+        for video in instance_videos:
+            self.instance_images.extend(itertools.repeat(video, repeats))
+
         self.num_instance_images = len(self.instance_images)
         self._length = self.num_instance_images
 
@@ -910,40 +943,45 @@ class DreamBoothDataset(Dataset):
             self._length = max(self.num_class_images, self.num_instance_images)
         else:
             self.class_data_root = None
+
         if class_data_root_2 is not None:
             self.class_data_root_2 = Path(class_data_root_2)
             self.class_data_root_2.mkdir(parents=True, exist_ok=True)
             self.class_images_path_2 = list(self.class_data_root_2.iterdir())
             if class_num is not None:
-                self.num_class_images = min(len(self.class_images_path), class_num)
+                self.num_class_images = min(len(self.class_images_path_2), class_num)
             else:
-                self.num_class_images = len(self.class_images_path)
+                self.num_class_images = len(self.class_images_path_2)
             self._length = max(self.num_class_images, self.num_instance_images)
         else:
             self.class_data_root_2 = None
+
         self.image_transforms = transforms.Compose(
             [
-                transforms.Resize(
-                    size, interpolation=transforms.InterpolationMode.BILINEAR
-                ),
-                transforms.CenterCrop(size)
-                if center_crop
-                else transforms.RandomCrop(size),
+                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
+
     def __len__(self):
         return self._length
 
     def __getitem__(self, index):
         example = {}
-        instance_image = self.instance_images[index % self.num_instance_images]
-        instance_image = exif_transpose(instance_image)
-
-        if not instance_image.mode == "RGB":
-            instance_image = instance_image.convert("RGB")
-        example["instance_images"] = self.image_transforms(instance_image)
+        instance_video = self.instance_images[index % self.num_instance_images]
+        
+        # Process each frame in the video
+        processed_frames = []
+        for frame in instance_video:
+            frame = exif_transpose(frame)
+            if not frame.mode == "RGB":
+                frame = frame.convert("RGB")
+            processed_frames.append(self.image_transforms(frame))
+        
+        # Stack frames: [num_frames, C, H, W]
+        example["instance_images"] = torch.stack(processed_frames)
 
         if self.custom_instance_prompts:
             caption = self.custom_instance_prompts[index % self.num_instance_images]
@@ -951,30 +989,25 @@ class DreamBoothDataset(Dataset):
                 example["instance_prompt"] = caption
             else:
                 example["instance_prompt"] = self.instance_prompt
-
-        else:  # costum prompts were provided, but length does not match size of image dataset
+        else:
             example["instance_prompt"] = self.instance_prompt
 
         if self.class_data_root:
-            class_image = Image.open(
-                self.class_images_path[index % self.num_class_images]
-            )
+            class_image = Image.open(self.class_images_path[index % self.num_class_images])
             class_image = exif_transpose(class_image)
-
             if not class_image.mode == "RGB":
                 class_image = class_image.convert("RGB")
             example["class_images"] = self.image_transforms(class_image)
             example["class_prompt"] = self.class_prompt
-        if self.class_data_root_2:
-            class_image = Image.open(
-                self.class_images_path_2[index % self.num_class_images]
-            )
-            class_image = exif_transpose(class_image)
 
+        if self.class_data_root_2:
+            class_image = Image.open(self.class_images_path_2[index % self.num_class_images])
+            class_image = exif_transpose(class_image)
             if not class_image.mode == "RGB":
                 class_image = class_image.convert("RGB")
             example["class_images_2"] = self.image_transforms(class_image)
-            example["class_prompt_2"] = self.class_prompt
+            example["class_prompt_2"] = self.class_prompt_2
+
         return example
 
 
@@ -1634,6 +1667,7 @@ def main(args):
         repeats=args.repeats,
         center_crop=args.center_crop,
         one_shot=args.with_one_shot, 
+        num_frames=num_frames
     )
 
     train_dataloader = torch.utils.data.DataLoader(
@@ -1968,10 +2002,24 @@ def main(args):
                     prompts = prompts_dict[f"prompts_{key}"]
 
                     # Convert images to latent space
-                    model_input = vae.encode(pixel_values).latent_dist.sample()
+                    batch_size = pixel_values.shape[0]
+                    num_frames = pixel_values.shape[1]  # [batch, num_frames, C, H, W]
+                    
+                    # Reshape for VAE: [batch*num_frames, C, H, W]
+                    pixel_values_reshaped = pixel_values.reshape(
+                        batch_size * num_frames, 
+                        pixel_values.shape[2], 
+                        pixel_values.shape[3], 
+                        pixel_values.shape[4]
+                    )
+                    
+                    # Encode
+                    model_input = vae.encode(pixel_values_reshaped).latent_dist.sample()
                     model_input = model_input * vae.config.scaling_factor
-                    if args.pretrained_vae_model_name_or_path is None:
-                        model_input = model_input.to(weight_dtype)
+                    
+                    # Reshape back: [batch, num_frames, C, H, W]
+                    model_input = model_input.reshape(batch_size, num_frames, *model_input.shape[1:])
+                    
                     model_inputs[key] = model_input
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(model_inputs["both"])
