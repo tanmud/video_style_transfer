@@ -24,6 +24,7 @@ from distutils.util import strtobool
 import random
 import shutil
 import warnings
+import imageio # added for video 
 from pathlib import Path
 
 import numpy as np
@@ -54,6 +55,8 @@ from diffusers import (
     DDPMScheduler,
     DPMSolverMultistepScheduler,
     StableDiffusionXLPipeline,
+    AnimateDiffPipeline,
+    MotionAdapter,
 )
 from diffusers.loaders import LoraLoaderMixin
 from diffusers.optimization import get_scheduler
@@ -399,6 +402,12 @@ def parse_args(input_args=None):
             "The resolution for input images, all the images in the train/validation dataset will be resized to this"
             " resolution"
         ),
+    )
+    parser.add_argument(
+        "--num_frames",
+        type=int,
+        default=16,
+        help="Number of frames to sample per video for training",
     )
     parser.add_argument(
         "--crops_coords_top_left_h",
@@ -865,9 +874,11 @@ class DreamBoothDataset(Dataset):
         repeats=1,
         center_crop=False,
         one_shot=False,
+        num_frames=16,
     ):
         self.size = size
         self.center_crop = center_crop
+        self.num_frames = num_frames
 
         self.instance_prompt = instance_prompt
         self.custom_instance_prompts = None
@@ -882,20 +893,49 @@ class DreamBoothDataset(Dataset):
             self.instance_data_root = Path(instance_data_root)
             if not self.instance_data_root.exists():
                 raise ValueError("Instance images root doesn't exists.")
-            instance_images = [
-                Image.open(path) for path in list(Path(instance_data_root).iterdir())
-            ]
-            if one_shot is True: 
-                selected_image = random.choice(instance_images)
-                instance_images = [selected_image]
-                print(selected_image)
+            
+            # Load video frames instead of single images
+            import cv2
+            
+            instance_videos = []
+            video_paths = list(Path(instance_data_root).glob("*.mp4")) + \
+                        list(Path(instance_data_root).glob("*.avi"))
+            
+            if video_paths:  # Video files mode
+                for video_path in video_paths:
+                    cap = cv2.VideoCapture(str(video_path))
+                    frames = []
+                    for _ in range(num_frames):
+                        ret, frame = cap.read()
+                        if ret:
+                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                            frames.append(Image.fromarray(frame_rgb))
+                        else:
+                            break
+                    cap.release()
+                    if len(frames) == num_frames:
+                        instance_videos.append(frames)
+            else:  # Frame folders mode
+                video_folders = [d for d in Path(instance_data_root).iterdir() if d.is_dir()]
+                for folder in video_folders:
+                    frame_paths = sorted(folder.glob("*.jpg")) + sorted(folder.glob("*.png"))
+                    frame_paths = frame_paths[:num_frames]
+                    if len(frame_paths) == num_frames:
+                        frames = [Image.open(p) for p in frame_paths]
+                        instance_videos.append(frames)
+            
+            if one_shot is True:
+                selected_video = random.choice(instance_videos)
+                instance_videos = [selected_video]
+                print(f"Selected video with {len(selected_video)} frames")
+            
             self.custom_instance_prompts = None
 
         self.instance_images = []
         self.style_vector = []
         self.content_vector = []
-        for img in instance_images:
-            self.instance_images.extend(itertools.repeat(img, repeats))
+        for video in instance_videos:
+            self.instance_images.extend(itertools.repeat(video, repeats))
         self.num_instance_images = len(self.instance_images)
         self._length = self.num_instance_images
 
@@ -933,48 +973,50 @@ class DreamBoothDataset(Dataset):
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
+
     def __len__(self):
         return self._length
 
     def __getitem__(self, index):
         example = {}
-        instance_image = self.instance_images[index % self.num_instance_images]
-        instance_image = exif_transpose(instance_image)
-
-        if not instance_image.mode == "RGB":
-            instance_image = instance_image.convert("RGB")
-        example["instance_images"] = self.image_transforms(instance_image)
-
+        instance_video = self.instance_images[index % self.num_instance_images]
+        
+        # Process each frame
+        processed_frames = []
+        for frame in instance_video:
+            frame = exif_transpose(frame)
+            if not frame.mode == "RGB":
+                frame = frame.convert("RGB")
+            processed_frames.append(self.image_transforms(frame))
+        
+        # Stack to [num_frames, C, H, W]
+        example["instance_images"] = torch.stack(processed_frames)
+        
         if self.custom_instance_prompts:
             caption = self.custom_instance_prompts[index % self.num_instance_images]
             if caption:
                 example["instance_prompt"] = caption
             else:
                 example["instance_prompt"] = self.instance_prompt
-
-        else:  # costum prompts were provided, but length does not match size of image dataset
+        else:
             example["instance_prompt"] = self.instance_prompt
-
+        
         if self.class_data_root:
-            class_image = Image.open(
-                self.class_images_path[index % self.num_class_images]
-            )
+            class_image = Image.open(self.class_images_path[index % self.num_class_images])
             class_image = exif_transpose(class_image)
-
             if not class_image.mode == "RGB":
                 class_image = class_image.convert("RGB")
             example["class_images"] = self.image_transforms(class_image)
             example["class_prompt"] = self.class_prompt
-        if self.class_data_root_2:
-            class_image = Image.open(
-                self.class_images_path_2[index % self.num_class_images]
-            )
-            class_image = exif_transpose(class_image)
 
+        if self.class_data_root_2:
+            class_image = Image.open(self.class_images_path_2[index % self.num_class_images])
+            class_image = exif_transpose(class_image)
             if not class_image.mode == "RGB":
                 class_image = class_image.convert("RGB")
             example["class_images_2"] = self.image_transforms(class_image)
-            example["class_prompt_2"] = self.class_prompt
+            example["class_prompt_2"] = self.class_prompt_2
+
         return example
 
 
@@ -1634,6 +1676,7 @@ def main(args):
         repeats=args.repeats,
         center_crop=args.center_crop,
         one_shot=args.with_one_shot, 
+        num_frames=args.num_frames
     )
 
     train_dataloader = torch.utils.data.DataLoader(
@@ -1837,15 +1880,15 @@ def main(args):
                 tags = [tag.strip() for tag in tags]
                 wandb.run.tags = tags
     def log_validation(
-        pipeline,
-        args,
-        accelerator,
-        validation_prompt=None,
-        validation_prompt_content=None,
-        validation_prompt_style=None,
-    ):
+            pipeline,
+            args,
+            accelerator,
+            validation_prompt=None,
+            validation_prompt_content=None,
+            validation_prompt_style=None,
+        ):
         logger.info(
-            f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
+            f"Running validation... \n Generating {args.num_validation_images} videos with prompt:"
             f" {validation_prompt}."
         )
         scheduler_args = {}
@@ -1866,14 +1909,33 @@ def main(args):
         # run inference
         generator = torch.Generator(device=accelerator.device).manual_seed(args.seed) if args.seed else None
         # Currently the context determination is a bit hand-wavy. We can improve it in the future if there's a better
-        # way to condition it. Reference: https://github.com/huggingface/diffusers/pull/7126#issuecomment-1968523051
+        # way to condition it. Reference: [https://github.com/huggingface/diffusers/pull/7126#issuecomment-1968523051](https://github.com/huggingface/diffusers/pull/7126#issuecomment-1968523051)
         if pipeline.__class__.__name__ == 'StableDiffusionXLUnZipLoRAPipeline':
             pipeline_args = {"prompt": validation_prompt, 
                             "prompt_content": validation_prompt_content, 
-                            "prompt_style": validation_prompt_style}
+                            "prompt_style": validation_prompt_style,
+                            "num_frames": args.num_frames}
         else:   
-            pipeline_args = {"prompt": validation_prompt}
-        images = [pipeline(**pipeline_args, generator=generator, negative_prompt=", ".join(f"({w}:1.2)" for w in universal_nevigate)).images[0] for _ in range(args.num_validation_images)]
+            pipeline_args = {"prompt": validation_prompt, "num_frames": args.num_frames}
+        
+        # Generate videos
+        videos = []
+        for i in range(args.num_validation_images):
+            output = pipeline(**pipeline_args, generator=generator, negative_prompt=", ".join(f"({w}:1.2)" for w in universal_nevigate))
+            frames = output.frames[0]  # Get frames from first video
+            videos.append(frames)
+            
+            # Save each video as GIF
+            imageio.mimsave(
+                f"{args.output_dir}/validation_{i}.gif",
+                frames,
+                fps=8,
+                loop=0
+            )
+        
+        # For logging, use first frame of each video
+        images = [frames[0] for frames in videos]
+        
         if accelerator.trackers[0].name == "tensorboard":
             image_lst = np.stack([np.asarray(img) for img in images])
         if accelerator.trackers[0].name == "wandb":
@@ -1884,6 +1946,7 @@ def main(args):
             torch.cuda.empty_cache()
             
         return images, image_lst
+
     def concatenate_horizontal_img(img_lst):
         img_lst = [img.convert('RGB') if img.mode != 'RGB' else img for img in img_lst]
         widths, heights = zip(*(img.size for img in img_lst))
@@ -1968,8 +2031,24 @@ def main(args):
                     prompts = prompts_dict[f"prompts_{key}"]
 
                     # Convert images to latent space
-                    model_input = vae.encode(pixel_values).latent_dist.sample()
+                    # pixel_values: [batch, num_frames, C, H, W]
+                    batch_size = pixel_values.shape[0]
+                    num_frames = pixel_values.shape[1]
+
+                    # Flatten to [batch*frames, C, H, W] for VAE
+                    pixel_values_reshaped = pixel_values.reshape(
+                        batch_size * num_frames,
+                        pixel_values.shape[2],
+                        pixel_values.shape[3],
+                        pixel_values.shape[4]
+                    )
+
+                    model_input = vae.encode(pixel_values_reshaped.to(dtype=vae.dtype)).latent_dist.sample()
                     model_input = model_input * vae.config.scaling_factor
+
+                    # Reshape back to [batch, num_frames, ...]
+                    model_input = model_input.reshape(batch_size, num_frames, *model_input.shape[1:])
+
                     if args.pretrained_vae_model_name_or_path is None:
                         model_input = model_input.to(weight_dtype)
                     model_inputs[key] = model_input
@@ -2226,15 +2305,22 @@ def main(args):
                             subfolder="text_encoder_2",
                             revision=args.revision,
                         )
-                        pipeline = StableDiffusionXLUnZipLoRAPipeline.from_pretrained(
-                        args.pretrained_model_name_or_path,
-                        vae=vae,
-                        text_encoder=accelerator.unwrap_model(text_encoder_one),
-                        text_encoder_2=accelerator.unwrap_model(text_encoder_two),
-                        unet=accelerator.unwrap_model(unet),
-                        revision=args.revision,
-                        torch_dtype=weight_dtype,
-                    )
+                        # Load motion adapter
+                        motion_adapter = MotionAdapter.from_pretrained(
+                            "guoyww/animatediff-motion-adapter-sdxl-beta",
+                            torch_dtype=weight_dtype
+                        )
+
+                        pipeline = AnimateDiffPipeline.from_pretrained(
+                            args.pretrained_model_name_or_path,
+                            motion_adapter=motion_adapter,
+                            vae=vae,
+                            text_encoder=accelerator.unwrap_model(text_encoder_one),
+                            text_encoder_2=accelerator.unwrap_model(text_encoder_two),
+                            unet=accelerator.unwrap_model(unet),
+                            revision=args.revision,
+                            torch_dtype=weight_dtype,
+                        )
 
                     # We train on the simplified learning objective. If we were previously predicting a variance, we need the scheduler to ignore it
                     scheduler_args = {}

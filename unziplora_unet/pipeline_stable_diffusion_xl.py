@@ -9,11 +9,12 @@ from transformers import (
     CLIPVisionModelWithProjection,
 )
 from diffusers.models import AutoencoderKL, ImageProjection
+from diffusers import AnimateDiffPipeline, MotionAdapter
 from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import (
-    StableDiffusionXLPipeline,
     retrieve_timesteps,
     rescale_noise_cfg
 )
+
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
 from diffusers.utils import (
@@ -55,7 +56,7 @@ EXAMPLE_DOC_STRING = """
 
 
 class StableDiffusionXLUnZipLoRAPipeline(
-    StableDiffusionXLPipeline
+    AnimateDiffPipeline
 ):
     r"""
     Pipeline for text-to-image generation using Stable Diffusion XL.
@@ -145,6 +146,7 @@ class StableDiffusionXLUnZipLoRAPipeline(
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
+        num_frames: Optional[int] = 16,
         prompt_2: Optional[Union[str, List[str]]] = None,
         prompt_content: Optional[Union[str, List[str]]] = None,
         prompt_content_2: Optional[Union[str, List[str]]] = None,
