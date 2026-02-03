@@ -23,6 +23,9 @@ export VALID_STYLE="A biker in cartoon style on Mars"
 
 export VALID_CONTENT="A male biker biking on Mars"
 
+export WANDB_NAME="unziplora_infer"
+export WANDB_MODE="offline"
+
 # Run inference
 python infer_video.py \
   --output_dir="$OUTPUT_DIR" \
