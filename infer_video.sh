@@ -3,7 +3,7 @@
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 export RANK=64
 
-export OUTPUT_DIR="models/instance_videos/male_biker"
+export OUTPUT_DIR="models/male_biker/male_biker"
 export SAVE_DIR="output/male_biker_videos/"
 
 export VALIDATION_PROMPT="a male biker riding through a forest in cartoon style"
