@@ -17,8 +17,8 @@ export WANDB_MODE="offline"
 export NUM_FRAMES=16  # Number of frames to sample per video
 export RESOLUTION=512  # Lower resolution for video (memory)
 
-export INSTANCE_DIR="instance_videos/male_biker"
-export OUTPUT_DIR="models/instance_videos/male_biker"
+export INSTANCE_DIR="male_biker/male_biker"
+export OUTPUT_DIR="models/male_biker/male_biker"
 export STEPS=600
 
 # Training prompt

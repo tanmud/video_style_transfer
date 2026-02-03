@@ -8,7 +8,7 @@ export NUM_FRAMES=16
 
 export FPS=8
 
-export OUTPUT_DIR="models/instance_videos/male_biker"
+export OUTPUT_DIR="models/male_biker/male_biker"
 
 export SAVE_DIR="output/male_biker_test/"
 

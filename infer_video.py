@@ -263,14 +263,18 @@ def main(args):
         if len(args.validation_prompt) != 0 and args.validation_prompt != "":
             pipeline = load_pipeline_from_sdxl(MODEL_ID, vae=vae)
             
-            pipeline.unet = insert_unziplora_to_unet(
-                pipeline.unet,
-                f"{args.output_dir}/male_biker_content/pytorch_lora_weights.safetensors",  
-                f"{args.output_dir}/male_biker_style/pytorch_lora_weights.safetensors",    
-                weight_content_path=f"{args.output_dir}/merger_content.pth" if args.with_unziplora else None,
-                weight_style_path=f"{args.output_dir}/merger_style.pth" if args.with_unziplora else None,
-                rank=args.rank,
-            )
+            if args.with_unziplora:
+                pipeline.unet = insert_unziplora_to_unet(pipeline.unet, 
+                    f"{args.output_dir}_content", 
+                    f"{args.output_dir}_style",
+                    weight_content_path=f"{args.output_dir}_merger_content.pth",
+                    weight_style_path=f"{args.output_dir}_merger_style.pth",
+                    rank=args.rank)
+            else:
+                pipeline.unet = insert_unziplora_to_unet(pipeline.unet, 
+                    f"{args.output_dir}_content", 
+                    f"{args.output_dir}_style",
+                    rank=args.rank)
             
             pipeline = pipeline.to(device, dtype=weight_dtype)
             
