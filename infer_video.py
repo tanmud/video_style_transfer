@@ -5,8 +5,9 @@ import cv2
 import numpy as np
 from PIL import Image
 from diffusers import AutoencoderKL, StableDiffusionXLPipeline
-from unziplora_unet.utils import MODEL_ID  # "stabilityai/stable-diffusion-xl-base-1.0"
+from unziplora_unet.utils import *
 
+MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 seeds = [0, 1000, 111, 1234]
 device = "cuda" if torch.cuda.is_available() else "cpu"
 weight_dtype = torch.float16
