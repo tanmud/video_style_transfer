@@ -38,7 +38,7 @@ export VALID_STYLE_PROMPT="A biker in cartoon style"
 
 
 
-accelerate launch train_unziplora.py \
+accelerate launch video_train_unziplora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --name=$WANDB_NAME \
   --instance_data_dir=$INSTANCE_DIR \
