@@ -34,7 +34,7 @@ export STYLE_PROMPTS=(
 )
 STYLE_PROMPT=$(IFS=,; echo "${STYLE_PROMPTS[*]}")
 
-python infer_animatediff.py \
+accelerate launch infer_animate.py \
   --output_dir="$OUTPUT_DIR" \
   --rank="${RANK}" \
   --num="${NUM}" \
