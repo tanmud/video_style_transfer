@@ -135,9 +135,6 @@ def get_lora_weights(
         lora_name_or_path (str): huggingface repo id or folder path of lora weights
         subfolder (Optional[str], optional): sub folder. Defaults to None.
     """
-    print("#" *20)
-    print("Loading lora weights from ", lora_name_or_path)
-    print("#" *20)
     if os.path.exists(lora_name_or_path):
         if subfolder is not None:
             lora_name_or_path = os.path.join(lora_name_or_path, subfolder)

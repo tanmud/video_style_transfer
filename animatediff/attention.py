@@ -1,20 +1,20 @@
 from typing import Any, Dict, Optional
-
 import torch
 import torch.nn.functional as F
 from torch import nn
-
 from diffusers.utils.torch_utils import maybe_allow_in_graph
-from diffusers.models.attention import BasicTransformerBlock, _chunked_feed_forward
+from diffusers.models.attention import BasicTransformerBlock as DiffusersBasicTransformerBlock
+from diffusers.models.attention import _chunked_feed_forward
 from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, RMSNorm
+from animatediff.attention_processor import Attention
 
-from unziplora_unet.attention_processor import Attention
 
 @maybe_allow_in_graph
-class BasicTransformerBlock(BasicTransformerBlock):
-    r"""
-    Use separate attention module for attn.
+class BasicTransformerBlock(DiffusersBasicTransformerBlock):
     """
+    Transformer block with UnzipLoRA attention and video support (num_frames).
+    """
+
     def __init__(
         self,
         dim: int,
@@ -29,7 +29,7 @@ class BasicTransformerBlock(BasicTransformerBlock):
         double_self_attention: bool = False,
         upcast_attention: bool = False,
         norm_elementwise_affine: bool = True,
-        norm_type: str = "layer_norm",  # 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single'
+        norm_type: str = "layer_norm",
         norm_eps: float = 1e-5,
         final_dropout: bool = False,
         attention_type: str = "default",
@@ -54,7 +54,7 @@ class BasicTransformerBlock(BasicTransformerBlock):
             double_self_attention,
             upcast_attention,
             norm_elementwise_affine,
-            norm_type,  # 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single'
+            norm_type,
             norm_eps,
             final_dropout,
             attention_type,
@@ -66,7 +66,8 @@ class BasicTransformerBlock(BasicTransformerBlock):
             ff_bias,
             attention_out_bias,
         )
-        
+
+        # Replace with our custom Attention module
         self.attn1 = Attention(
             query_dim=dim,
             heads=num_attention_heads,
@@ -77,11 +78,9 @@ class BasicTransformerBlock(BasicTransformerBlock):
             upcast_attention=upcast_attention,
             out_bias=attention_out_bias,
         )
-        # 2. Cross-Attn
+
+        # Cross-attention
         if cross_attention_dim is not None or double_self_attention:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
-            # the second cross attention block.
             if self.use_ada_layer_norm:
                 self.norm2 = AdaLayerNorm(dim, num_embeds_ada_norm)
             elif self.use_ada_layer_norm_continuous:
@@ -105,11 +104,11 @@ class BasicTransformerBlock(BasicTransformerBlock):
                 bias=attention_bias,
                 upcast_attention=upcast_attention,
                 out_bias=attention_out_bias,
-            )  # is self-attn if encoder_hidden_states is none
+            )
         else:
             self.norm2 = None
             self.attn2 = None
-    
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -122,9 +121,9 @@ class BasicTransformerBlock(BasicTransformerBlock):
         cross_attention_kwargs: Dict[str, Any] = None,
         class_labels: Optional[torch.LongTensor] = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        num_frames: Optional[int] = None,  # NEW: for video
     ) -> torch.FloatTensor:
-        # Notice that normalization is always applied before the real computation in the following blocks.
-        # 0. Self-Attention
+        # Self-Attention
         batch_size = hidden_states.shape[0]
 
         if self.use_ada_layer_norm:
@@ -150,13 +149,16 @@ class BasicTransformerBlock(BasicTransformerBlock):
         if self.pos_embed is not None:
             norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-        # 1. Retrieve lora scale.
+        # Prepare cross attention kwargs with num_frames
         lora_scale = cross_attention_kwargs.get("scale", 1.0) if cross_attention_kwargs is not None else 1.0
-
-        # 2. Prepare GLIGEN inputs
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
-        # * input content and style hidden states for cross attention
+
+        # NEW: Add num_frames to cross_attention_kwargs
+        if num_frames is not None:
+            cross_attention_kwargs["num_frames"] = num_frames
+
+        # Self-attention
         attn_output = self.attn1(
             norm_hidden_states,
             encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
@@ -165,6 +167,7 @@ class BasicTransformerBlock(BasicTransformerBlock):
             attention_mask=attention_mask,
             **cross_attention_kwargs,
         )
+
         if self.use_ada_layer_norm_zero:
             attn_output = gate_msa.unsqueeze(1) * attn_output
         elif self.use_ada_layer_norm_single:
@@ -174,19 +177,17 @@ class BasicTransformerBlock(BasicTransformerBlock):
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        # 2.5 GLIGEN Control
+        # GLIGEN Control
         if gligen_kwargs is not None:
             hidden_states = self.fuser(hidden_states, gligen_kwargs["objs"])
 
-        # 3. Cross-Attention
+        # Cross-Attention
         if self.attn2 is not None:
             if self.use_ada_layer_norm:
                 norm_hidden_states = self.norm2(hidden_states, timestep)
             elif self.use_ada_layer_norm_zero or self.use_layer_norm:
                 norm_hidden_states = self.norm2(hidden_states)
             elif self.use_ada_layer_norm_single:
-                # For PixArt norm2 isn't applied here:
-                # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
                 norm_hidden_states = hidden_states
             elif self.use_ada_layer_norm_continuous:
                 norm_hidden_states = self.norm2(hidden_states, added_cond_kwargs["pooled_text_emb"])
@@ -195,7 +196,7 @@ class BasicTransformerBlock(BasicTransformerBlock):
 
             if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
                 norm_hidden_states = self.pos_embed(norm_hidden_states)
-            # * input content and style hidden states for cross attention
+
             attn_output = self.attn2(
                 norm_hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
@@ -206,7 +207,7 @@ class BasicTransformerBlock(BasicTransformerBlock):
             )
             hidden_states = attn_output + hidden_states
 
-        # 4. Feed-forward
+        # Feed-forward
         if self.use_ada_layer_norm_continuous:
             norm_hidden_states = self.norm3(hidden_states, added_cond_kwargs["pooled_text_emb"])
         elif not self.use_ada_layer_norm_single:
@@ -220,7 +221,6 @@ class BasicTransformerBlock(BasicTransformerBlock):
             norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
         if self._chunk_size is not None:
-            # "feed_forward_chunk_size" can be used to save memory
             ff_output = _chunked_feed_forward(
                 self.ff, norm_hidden_states, self._chunk_dim, self._chunk_size, lora_scale=lora_scale
             )
