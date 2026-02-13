@@ -2,15 +2,12 @@ import argparse
 import os
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from diffusers import AutoencoderKL, DDPMScheduler
 from diffusers.optimization import get_scheduler
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 from tqdm.auto import tqdm
-from pathlib import Path
-import numpy as np
-from PIL import Image
 
 # Import our utilities
 from animatediff.utils import (
@@ -22,50 +19,8 @@ from animatediff.utils import (
     get_trainable_parameters,
 )
 
-
-class VideoDataset(Dataset):
-    """Video dataset that loads frames from folders."""
-
-    def __init__(self, instance_data_dir, num_frames=16, resolution=512):
-        self.instance_data_dir = Path(instance_data_dir)
-        self.num_frames = num_frames
-        self.resolution = resolution
-
-        # Find all video folders
-        self.video_paths = sorted([d for d in self.instance_data_dir.iterdir() if d.is_dir()])
-        print(f"Found {len(self.video_paths)} videos in {instance_data_dir}")
-
-    def __len__(self):
-        return len(self.video_paths)
-
-    def __getitem__(self, idx):
-        video_path = self.video_paths[idx]
-
-        # Load frames
-        frame_paths = sorted(video_path.glob("*.png"))[:self.num_frames]
-
-        if len(frame_paths) < self.num_frames:
-            frame_paths = frame_paths + [frame_paths[-1]] * (self.num_frames - len(frame_paths))
-
-        frames = []
-        for frame_path in frame_paths:
-            img = Image.open(frame_path).convert("RGB")
-            img = img.resize((self.resolution, self.resolution))
-            img = np.array(img).astype(np.float32) / 255.0
-            img = (img - 0.5) / 0.5  # Normalize to [-1, 1]
-            frames.append(img)
-
-        # Stack: (F, H, W, C) → (F, C, H, W)
-        frames = np.stack(frames)
-        frames = torch.from_numpy(frames).permute(0, 3, 1, 2)
-
-        return {"frames": frames}
-
-
-def collate_fn(examples):
-    """Collate batch of videos."""
-    frames = torch.stack([ex["frames"] for ex in examples])
-    return {"frames": frames}
+# Import flexible video dataset
+from video_dataset import VideoDataset, collate_fn
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
@@ -185,7 +140,7 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    # Dataset
+    # Dataset (with better error messages)
     dataset = VideoDataset(
         args.instance_data_dir,
         num_frames=args.num_frames,
@@ -279,7 +234,6 @@ def main(args):
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                 # USE THE PROMPTS (randomly choose which one to condition on)
-                # This is similar to how your UnzipLoRA trains
                 prompt_choice = torch.rand(1).item()
                 if prompt_choice < 0.33:
                     # Use instance prompt (combined)
@@ -355,10 +309,6 @@ def main(args):
                             save_full_model=False,
                         )
 
-                # TODO: Validation video generation
-                # if global_step % args.validation_steps == 0:
-                #     generate videos with validation prompts
-
             if global_step >= args.max_train_steps:
                 break
 
@@ -392,10 +342,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_frames", type=int, default=16)
     parser.add_argument("--resolution", type=int, default=512)
 
-    # Training prompts (USED during training)
-    parser.add_argument("--instance_prompt", type=str, default="", help="Main training prompt")
-    parser.add_argument("--content_forward_prompt", type=str, default="", help="Content prompt")
-    parser.add_argument("--style_forward_prompt", type=str, default="", help="Style prompt")
+    # Training prompts
+    parser.add_argument("--instance_prompt", type=str, default="")
+    parser.add_argument("--content_forward_prompt", type=str, default="")
+    parser.add_argument("--style_forward_prompt", type=str, default="")
 
     # Validation prompts
     parser.add_argument("--validation_content", type=str, default="")
