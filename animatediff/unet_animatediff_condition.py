@@ -227,7 +227,7 @@ class UNetAnimateDiffConditionModel(UNet2DConditionModel):
         sample = self.conv_act(sample)
         sample = self.conv_out(sample)
 
-        from diffusers.models.unets.unet_2d_condition import UNet2DConditionOutput
+        from diffusers.models.unet_2d_condition import UNet2DConditionOutput
         return UNet2DConditionOutput(sample=sample)
 
     def _apply_temporal(self, hidden_states, temporal_module, batch_size, num_frames):
