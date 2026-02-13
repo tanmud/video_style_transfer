@@ -215,7 +215,7 @@ def main(args):
                 batch_size, num_frames = frames.shape[0], frames.shape[1]
 
                 # Flatten for VAE: (B, F, C, H, W) → (B*F, C, H, W)
-                frames_flat = frames.reshape(-1, *frames.shape[2:])
+                frames_flat = frames.reshape(-1, *frames.shape[2:]).to(dtype=vae.dtype)
 
                 # Encode to latents
                 with torch.no_grad():
