@@ -24,27 +24,16 @@ from animatediff.utils import (
 
 
 class VideoDataset(Dataset):
-    """
-    Simple video dataset that loads frames from folders.
+    """Video dataset that loads frames from folders."""
 
-    Expected structure:
-        video_dir/
-            video_001/
-                frame_000.png
-                frame_001.png
-                ...
-            video_002/
-                ...
-    """
-
-    def __init__(self, video_dir, num_frames=16, resolution=512):
-        self.video_dir = Path(video_dir)
+    def __init__(self, instance_data_dir, num_frames=16, resolution=512):
+        self.instance_data_dir = Path(instance_data_dir)
         self.num_frames = num_frames
         self.resolution = resolution
 
         # Find all video folders
-        self.video_paths = sorted([d for d in self.video_dir.iterdir() if d.is_dir()])
-        print(f"Found {len(self.video_paths)} videos in {video_dir}")
+        self.video_paths = sorted([d for d in self.instance_data_dir.iterdir() if d.is_dir()])
+        print(f"Found {len(self.video_paths)} videos in {instance_data_dir}")
 
     def __len__(self):
         return len(self.video_paths)
@@ -56,7 +45,6 @@ class VideoDataset(Dataset):
         frame_paths = sorted(video_path.glob("*.png"))[:self.num_frames]
 
         if len(frame_paths) < self.num_frames:
-            # Repeat last frame if not enough frames
             frame_paths = frame_paths + [frame_paths[-1]] * (self.num_frames - len(frame_paths))
 
         frames = []
@@ -71,25 +59,17 @@ class VideoDataset(Dataset):
         frames = np.stack(frames)
         frames = torch.from_numpy(frames).permute(0, 3, 1, 2)
 
-        # Prompt (use folder name or generic prompt)
-        prompt = video_path.name.replace("_", " ")
-
-        return {
-            "frames": frames,  # (F, C, H, W)
-            "prompt": prompt
-        }
+        return {"frames": frames}
 
 
 def collate_fn(examples):
     """Collate batch of videos."""
-    frames = torch.stack([ex["frames"] for ex in examples])  # (B, F, C, H, W)
-    prompts = [ex["prompt"] for ex in examples]
-    return {"frames": frames, "prompts": prompts}
+    frames = torch.stack([ex["frames"] for ex in examples])
+    return {"frames": frames}
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
     """Encode text prompt for SDXL (dual text encoders)."""
-    # Tokenize with both tokenizers
     text_inputs = tokenizer(
         prompt,
         padding="max_length",
@@ -105,7 +85,6 @@ def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, 
         return_tensors="pt",
     )
 
-    # Encode with both text encoders
     prompt_embeds = text_encoder(
         text_inputs.input_ids.to(device),
         output_hidden_states=True,
@@ -135,7 +114,8 @@ def main(args):
     )
 
     # Load models
-    print("Loading models...")
+    if accelerator.is_main_process:
+        print("Loading models...")
 
     # VAE
     vae = AutoencoderKL.from_pretrained(
@@ -170,22 +150,22 @@ def main(args):
         subfolder="tokenizer_2",
     )
 
-    # UNet with motion modules - USING UTILS!
-    print("\nLoading UNet with motion modules...")
+    # UNet with motion modules
+    if accelerator.is_main_process:
+        print("\nLoading UNet with motion modules...")
     unet = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_module_kwargs={"num_layers": args.motion_module_layers},
-        torch_dtype=torch.float32,  # Use fp32 for training, accelerator handles mixed precision
+        torch_dtype=torch.float32,
         device=accelerator.device,
     )
 
-    # Freeze/unfreeze based on training mode - USING UTILS!
+    # Freeze/unfreeze
     if args.train_motion_only:
         freeze_spatial_layers(unet)
     else:
         unfreeze_all_layers(unet)
 
-    # Print parameter summary - USING UTILS!
     if accelerator.is_main_process:
         print_parameter_summary(unet)
 
@@ -195,7 +175,7 @@ def main(args):
         subfolder="scheduler",
     )
 
-    # Optimizer - USING UTILS!
+    # Optimizer
     trainable_params = get_trainable_parameters(unet)
     optimizer = torch.optim.AdamW(
         trainable_params,
@@ -227,26 +207,59 @@ def main(args):
         num_training_steps=args.max_train_steps,
     )
 
-    # Prepare with accelerator
+    # Prepare
     unet, optimizer, dataloader, lr_scheduler = accelerator.prepare(
         unet, optimizer, dataloader, lr_scheduler
     )
 
+    # PRE-COMPUTE TEXT EMBEDDINGS (like your UnzipLoRA training)
+    if accelerator.is_main_process:
+        print("\nPre-computing text embeddings for prompts...")
+
+    with torch.no_grad():
+        # Instance prompt (main training prompt)
+        instance_prompt_embeds, instance_pooled_embeds = encode_prompt(
+            text_encoder, text_encoder_2, tokenizer, tokenizer_2,
+            args.instance_prompt, accelerator.device
+        )
+
+        # Content forward prompt
+        content_prompt_embeds, content_pooled_embeds = encode_prompt(
+            text_encoder, text_encoder_2, tokenizer, tokenizer_2,
+            args.content_forward_prompt, accelerator.device
+        )
+
+        # Style forward prompt
+        style_prompt_embeds, style_pooled_embeds = encode_prompt(
+            text_encoder, text_encoder_2, tokenizer, tokenizer_2,
+            args.style_forward_prompt, accelerator.device
+        )
+
+    if accelerator.is_main_process:
+        print(f"  Instance prompt: {args.instance_prompt}")
+        print(f"  Content forward: {args.content_forward_prompt}")
+        print(f"  Style forward: {args.style_forward_prompt}")
+
+    # Initialize trackers
+    if accelerator.is_main_process:
+        config = vars(args)
+        accelerator.init_trackers(args.name, config=config)
+
     # Training loop
-    print(f"\nStarting training for {args.max_train_steps} steps")
+    if accelerator.is_main_process:
+        print(f"\nStarting training for {args.max_train_steps} steps\n")
+
     global_step = 0
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
 
     for epoch in range(args.num_train_epochs):
         for batch in dataloader:
             with accelerator.accumulate(unet):
-                # Get frames: (B, F, C, H, W)
+                # Get frames
                 frames = batch["frames"].to(accelerator.device)
-                prompts = batch["prompts"]
-
                 batch_size, num_frames = frames.shape[0], frames.shape[1]
 
-                # Flatten frames for VAE encoding: (B, F, C, H, W) → (B*F, C, H, W)
+                # Flatten for VAE: (B, F, C, H, W) → (B*F, C, H, W)
                 frames_flat = frames.reshape(-1, *frames.shape[2:])
 
                 # Encode to latents
@@ -261,28 +274,35 @@ def main(args):
                     (batch_size,),
                     device=latents.device,
                 )
-                # Expand timesteps for all frames
                 timesteps = timesteps.repeat_interleave(num_frames)
 
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-                # Encode prompts
-                with torch.no_grad():
-                    encoder_hidden_states, pooled_prompt_embeds = encode_prompt(
-                        text_encoder, text_encoder_2,
-                        tokenizer, tokenizer_2,
-                        prompts, accelerator.device
-                    )
+                # USE THE PROMPTS (randomly choose which one to condition on)
+                # This is similar to how your UnzipLoRA trains
+                prompt_choice = torch.rand(1).item()
+                if prompt_choice < 0.33:
+                    # Use instance prompt (combined)
+                    encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)
+                elif prompt_choice < 0.66:
+                    # Use content forward prompt
+                    encoder_hidden_states = content_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = content_pooled_embeds.repeat(batch_size, 1)
+                else:
+                    # Use style forward prompt
+                    encoder_hidden_states = style_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = style_pooled_embeds.repeat(batch_size, 1)
 
-                # Prepare SDXL added conditions
+                # SDXL added conditions
                 add_time_ids = torch.cat([
-                    torch.tensor([args.resolution, args.resolution]),  # original size
-                    torch.tensor([0, 0]),  # crops coords top-left
-                    torch.tensor([args.resolution, args.resolution]),  # target size
+                    torch.tensor([args.resolution, args.resolution]),
+                    torch.tensor([0, 0]),
+                    torch.tensor([args.resolution, args.resolution]),
                 ]).unsqueeze(0).repeat(batch_size, 1).to(accelerator.device, dtype=latents.dtype)
 
                 added_cond_kwargs = {
-                    "text_embeds": pooled_prompt_embeds,
+                    "text_embeds": pooled_embeds,
                     "time_ids": add_time_ids,
                 }
 
@@ -301,7 +321,7 @@ def main(args):
                 elif noise_scheduler.config.prediction_type == "v_prediction":
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 else:
-                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+                    raise ValueError(f"Unknown prediction type")
 
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
@@ -322,17 +342,22 @@ def main(args):
                 if global_step % args.log_every == 0:
                     logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
                     progress_bar.set_postfix(**logs)
+                    accelerator.log(logs, step=global_step)
 
-                # Save checkpoint - USING UTILS!
-                if global_step % args.save_every == 0:
+                # Save checkpoint
+                if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
                         unwrapped_unet = accelerator.unwrap_model(unet)
                         save_checkpoint(
                             unwrapped_unet,
                             args.output_dir,
                             global_step,
-                            save_full_model=args.save_full_model,
+                            save_full_model=False,
                         )
+
+                # TODO: Validation video generation
+                # if global_step % args.validation_steps == 0:
+                #     generate videos with validation prompts
 
             if global_step >= args.max_train_steps:
                 break
@@ -340,16 +365,16 @@ def main(args):
         if global_step >= args.max_train_steps:
             break
 
-    # Save final model - USING UTILS!
+    # Save final
     if accelerator.is_main_process:
         unwrapped_unet = accelerator.unwrap_model(unet)
         save_checkpoint(
             unwrapped_unet,
             args.output_dir,
             "final",
-            save_full_model=args.save_full_model,
+            save_full_model=False,
         )
-        print(f"\nTraining complete! Saved to {args.output_dir}")
+        print(f"\n✅ Training complete! Saved to {args.output_dir}")
 
     accelerator.end_training()
 
@@ -359,13 +384,26 @@ if __name__ == "__main__":
 
     # Model
     parser.add_argument("--pretrained_model_name_or_path", type=str, default="stabilityai/stable-diffusion-xl-base-1.0")
-    parser.add_argument("--motion_module_layers", type=int, default=2, help="Number of temporal transformer layers")
-    parser.add_argument("--train_motion_only", action="store_true", help="Train only motion modules, freeze spatial")
+    parser.add_argument("--motion_module_layers", type=int, default=2)
+    parser.add_argument("--train_motion_only", action="store_true")
 
     # Data
-    parser.add_argument("--instance_data_dir", type=str, required=True, help="Path to video dataset")
-    parser.add_argument("--num_frames", type=int, default=16, help="Number of frames per video")
-    parser.add_argument("--resolution", type=int, default=512, help="Resolution (height=width)")
+    parser.add_argument("--instance_data_dir", type=str, required=True)
+    parser.add_argument("--num_frames", type=int, default=16)
+    parser.add_argument("--resolution", type=int, default=512)
+
+    # Training prompts (USED during training)
+    parser.add_argument("--instance_prompt", type=str, default="", help="Main training prompt")
+    parser.add_argument("--content_forward_prompt", type=str, default="", help="Content prompt")
+    parser.add_argument("--style_forward_prompt", type=str, default="", help="Style prompt")
+
+    # Validation prompts
+    parser.add_argument("--validation_content", type=str, default="")
+    parser.add_argument("--validation_style", type=str, default="")
+    parser.add_argument("--validation_prompt", type=str, default="")
+    parser.add_argument("--validation_prompt_content", type=str, default="")
+    parser.add_argument("--validation_prompt_style", type=str, default="")
+    parser.add_argument("--validation_steps", type=int, default=500)
 
     # Training
     parser.add_argument("--output_dir", type=str, default="./outputs")
@@ -375,18 +413,20 @@ if __name__ == "__main__":
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--lr_scheduler", type=str, default="constant")
-    parser.add_argument("--lr_warmup_steps", type=int, default=500)
+    parser.add_argument("--lr_warmup_steps", type=int, default=0)
     parser.add_argument("--adam_beta1", type=float, default=0.9)
     parser.add_argument("--adam_beta2", type=float, default=0.999)
     parser.add_argument("--adam_weight_decay", type=float, default=1e-2)
     parser.add_argument("--adam_epsilon", type=float, default=1e-8)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
-    parser.add_argument("--mixed_precision", type=str, default="fp16", choices=["no", "fp16", "bf16"])
-    parser.add_argument("--save_full_model", action="store_true", help="Save full UNet instead of just motion modules")
+    parser.add_argument("--mixed_precision", type=str, default="fp16")
+    parser.add_argument("--checkpointing_steps", type=int, default=500)
+    parser.add_argument("--seed", type=str, default="0")
 
     # Logging
+    parser.add_argument("--name", type=str, default="animatediff")
+    parser.add_argument("--report_to", type=str, default="wandb")
     parser.add_argument("--log_every", type=int, default=10)
-    parser.add_argument("--save_every", type=int, default=1000)
     parser.add_argument("--dataloader_num_workers", type=int, default=0)
 
     args = parser.parse_args()
