@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 
 # Import our utilities
-from utils import load_unet_with_motion, check_motion_module_compatibility
+from animatediff.utils import load_unet_with_motion, check_motion_module_compatibility
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):

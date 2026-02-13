@@ -6,6 +6,7 @@ from diffusers.utils import logging
 
 logger = logging.get_logger(__name__)
 
+from animatediff.unet_animatediff_condition import UNetAnimateDiffConditionModel
 
 def load_unet_with_motion(
     pretrained_model_name_or_path: str,
@@ -41,7 +42,6 @@ def load_unet_with_motion(
             motion_module_kwargs={"num_layers": 2}
         )
     """
-    from unziplora_unet.unet_animatediff_condition import UNetAnimateDiffConditionModel
 
     if motion_module_kwargs is None:
         motion_module_kwargs = {}
@@ -259,7 +259,7 @@ def merge_motion_modules(
             output_path="./merged_animatediff_unet"
         )
     """
-    from unziplora_unet.unet_animatediff_condition import UNetAnimateDiffConditionModel
+    
 
     logger.info(f"Loading base UNet from {base_unet_path}")
     unet = UNetAnimateDiffConditionModel.from_pretrained(
@@ -299,7 +299,6 @@ def convert_standard_unet_to_animatediff(
             motion_module_kwargs={"num_layers": 2}
         )
     """
-    from unziplora_unet.unet_animatediff_condition import UNetAnimateDiffConditionModel
 
     if motion_module_kwargs is None:
         motion_module_kwargs = {}
