@@ -1,72 +1,66 @@
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 
-# AnimateDiff Motion Module Settings
+# Motion Module Settings
 export MOTION_LAYERS=2
 
+# WandB Settings
+export WANDB_NAME="animatediff_male_biker"
+export WANDB_MODE="offline"
+
 # Video Data Settings
-export VIDEO_DATA_DIR="./instance_videos/male_biker"
-export NUM_FRAMES=16  # Number of frames per video
-export RESOLUTION=512  # Video resolution (512 or 1024)
+export NUM_FRAMES=16  # Number of frames to sample per video
+export RESOLUTION=512  # Lower resolution for video (memory)
+export INSTANCE_DIR="male_biker/male_biker"
+export OUTPUT_DIR="models/male_biker/male_biker"
+export STEPS=10000
 
 # Training Settings
-export OUTPUT_DIR="./outputs/animatediff_training"
-export TRAIN_BATCH_SIZE=1
-export GRADIENT_ACCUMULATION=4
-export MAX_STEPS=10000
 export LEARNING_RATE=1e-4
-export MIXED_PRECISION="fp16"  # "no", "fp16", or "bf16"
+export TRAIN_MOTION_ONLY=true
 
-# Training Mode
-export TRAIN_MOTION_ONLY=true  # Set to false for full fine-tuning
+# Training prompts (male_biker specific)
+export PROMPT="A male biker in cartoon style biking on the street"
+export CONTENT_FORWARD_PROMPT="A male biker"
+export STYLE_FORWARD_PROMPT="A biker in cartoon style"
 
-# Scheduler Settings
-export LR_SCHEDULER="constant"
-export LR_WARMUP_STEPS=0
+# For validation (male_biker specific)
+export VALID_CONTENT="A male biker biking on a park"
+export VALID_PROMPT="A male biker in cartoon style biking on a park"
+export VALID_STYLE="A biker in cartoon style biking on a park"
 
-# Optimizer Settings
-export ADAM_BETA1=0.9
-export ADAM_BETA2=0.999
-export ADAM_WEIGHT_DECAY=1e-2
-export ADAM_EPSILON=1e-8
-export MAX_GRAD_NORM=1.0
+# for content validation (male_biker specific)
+export VALID_CONTENT_PROMPT="a video of a biker in park"
 
-# Logging & Checkpointing
-export LOG_EVERY=10
-export SAVE_EVERY=1000
-export DATALOADER_NUM_WORKERS=0
+# for style validation (male_biker specific)
+export VALID_STYLE_PROMPT="A biker in cartoon style"
 
-# WandB Settings
-export WANDB_MODE="offline"  # "online" or "offline"
+# Validation settings
+export VALIDATION_STEPS=500  # How often to run validation
 
-# Build accelerate command
-ACCELERATE_CMD="accelerate launch train_animatediff.py \
+accelerate launch train_animatediff.py \
     --pretrained_model_name_or_path=$MODEL_NAME \
-    --motion_module_layers=$MOTION_LAYERS \
-    --video_data_dir=$VIDEO_DATA_DIR \
-    --num_frames=$NUM_FRAMES \
-    --resolution=$RESOLUTION \
+    --name=$WANDB_NAME \
+    --instance_data_dir=$INSTANCE_DIR \
     --output_dir=$OUTPUT_DIR \
-    --train_batch_size=$TRAIN_BATCH_SIZE \
-    --gradient_accumulation_steps=$GRADIENT_ACCUMULATION \
-    --max_train_steps=$MAX_STEPS \
-    --learning_rate=$LEARNING_RATE \
-    --lr_scheduler=$LR_SCHEDULER \
-    --lr_warmup_steps=$LR_WARMUP_STEPS \
-    --adam_beta1=$ADAM_BETA1 \
-    --adam_beta2=$ADAM_BETA2 \
-    --adam_weight_decay=$ADAM_WEIGHT_DECAY \
-    --adam_epsilon=$ADAM_EPSILON \
-    --max_grad_norm=$MAX_GRAD_NORM \
-    --mixed_precision=$MIXED_PRECISION \
-    --log_every=$LOG_EVERY \
-    --save_every=$SAVE_EVERY \
-    --dataloader_num_workers=$DATALOADER_NUM_WORKERS"
-
-# Add train_motion_only flag if enabled
-if [ "$TRAIN_MOTION_ONLY" = "true" ]; then
-    ACCELERATE_CMD="$ACCELERATE_CMD \
-    --train_motion_only"
-fi
-
-# Execute training
-eval $ACCELERATE_CMD
+    --instance_prompt="${PROMPT}" \
+    --content_forward_prompt="${CONTENT_FORWARD_PROMPT}" \
+    --style_forward_prompt="${STYLE_FORWARD_PROMPT}" \
+    --motion_module_layers=$MOTION_LAYERS \
+    --resolution=$RESOLUTION \
+    --num_frames=$NUM_FRAMES \
+    --train_batch_size=1 \
+    --learning_rate="${LEARNING_RATE}" \
+    --report_to="wandb" \
+    --lr_scheduler="constant" \
+    --lr_warmup_steps=0 \
+    --max_train_steps="$STEPS" \
+    --checkpointing_steps=500 \
+    --mixed_precision="fp16" \
+    --seed="0" \
+    --validation_content="${VALID_CONTENT}" \
+    --validation_style="${VALID_STYLE}" \
+    --validation_prompt="${VALID_PROMPT}" \
+    --validation_prompt_style="${VALID_STYLE_PROMPT}" \
+    --validation_prompt_content="${VALID_CONTENT_PROMPT}" \
+    --validation_steps=$VALIDATION_STEPS \
+    $([ "$TRAIN_MOTION_ONLY" = "true" ] && echo "--train_motion_only")
