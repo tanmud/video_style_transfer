@@ -20,7 +20,7 @@ from animatediff.utils import (
 )
 
 # Import flexible video dataset
-from video_dataset import VideoDataset, collate_fn
+from animatediff.video_dataset import VideoDataset, collate_fn
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
