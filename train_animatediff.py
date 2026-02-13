@@ -207,7 +207,7 @@ def main(args):
 
     # Dataset
     dataset = VideoDataset(
-        args.video_data_dir,
+        args.instance_data_dir,
         num_frames=args.num_frames,
         resolution=args.resolution,
     )
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     parser.add_argument("--train_motion_only", action="store_true", help="Train only motion modules, freeze spatial")
 
     # Data
-    parser.add_argument("--video_data_dir", type=str, required=True, help="Path to video dataset")
+    parser.add_argument("--instance_data_dir", type=str, required=True, help="Path to video dataset")
     parser.add_argument("--num_frames", type=int, default=16, help="Number of frames per video")
     parser.add_argument("--resolution", type=int, default=512, help="Resolution (height=width)")
 
