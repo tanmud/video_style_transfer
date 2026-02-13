@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Optional, Tuple, Dict, Any
 from diffusers import UNet2DConditionModel
-from diffusers.models.unets.unet_2d_blocks import CrossAttnDownBlock2D, DownBlock2D, CrossAttnUpBlock2D, UpBlock2D
+from diffusers.models.unet_2d_blocks import CrossAttnDownBlock2D, DownBlock2D, CrossAttnUpBlock2D, UpBlock2D
 
 # Use the correct temporal transformer
 from animatediff.temporal_transformer import TemporalTransformer
