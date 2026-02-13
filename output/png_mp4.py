@@ -45,7 +45,7 @@ def images_to_video(input_folder, output_path, fps=8):
         print(f"  Processing: {i+1}/{len(images)} - {image_path.name}", end='\r')
     
     video.release()
-    print(f"\n✅ Video saved to: {output_path}")
+    print(f"\nVideo saved to: {output_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Convert frame_NNNN.png to MP4")

@@ -324,7 +324,7 @@ def main(args):
             "final",
             save_full_model=False,
         )
-        print(f"\n✅ Training complete! Saved to {args.output_dir}")
+        print(f"\nTraining complete! Saved to {args.output_dir}")
 
     accelerator.end_training()
 

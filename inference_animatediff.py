@@ -190,9 +190,9 @@ def main(args):
         print("Validating motion module file...")
         try:
             info = check_motion_module_compatibility(args.motion_module_path)
-            print(f"✅ Valid motion module with {info['total_params']:,} parameters\n")
+            print(f"Valid motion module with {info['total_params']:,} parameters\n")
         except (FileNotFoundError, ValueError) as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
             return
 
     # Load models

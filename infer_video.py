@@ -59,7 +59,7 @@ def images_to_video(frames, output_path, fps=8):
         video.write(frame_bgr)
     
     video.release()
-    print(f"✅ Video saved to: {output_path}")
+    print(f"Video saved to: {output_path}")
 
 def main(args):
     os.makedirs(args.save_dir, exist_ok=True)
@@ -114,7 +114,7 @@ def main(args):
             )
             frames.append(frame)
         
-        print(f"\n✅ Generated {len(frames)} frames")
+        print(f"\nGenerated {len(frames)} frames")
         
         # Save frames as images (optional)
         frames_dir = os.path.join(args.save_dir, "frames")

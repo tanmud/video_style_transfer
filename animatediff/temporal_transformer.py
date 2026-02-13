@@ -173,5 +173,5 @@ if __name__ == "__main__":
     loss = out.sum()
     loss.backward()
 
-    print("✅ Gradients computed successfully")
-    print(f"✅ Parameters: {sum(p.numel() for p in temporal.parameters()):,}")
+    print(f"Gradients computed successfully")
+    print(f"Parameters: {sum(p.numel() for p in temporal.parameters()):,}")

@@ -112,7 +112,7 @@ class UNetAnimateDiffConditionModel(UNet2DConditionModel):
             else:
                 self.up_temporal.append(None)
 
-        print("✅ Temporal transformers added successfully")
+        print("Temporal transformers added successfully")
 
     def forward(
         self,
