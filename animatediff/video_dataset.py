@@ -3,29 +3,22 @@ from torch.utils.data import Dataset
 from pathlib import Path
 import numpy as np
 from PIL import Image
+import cv2
 
 
 class VideoDataset(Dataset):
     """
-    Video dataset that loads frames from folders.
+    Video dataset that loads MP4 files directly.
 
-    Supports two structures:
+    Expected structure:
+        instance_data_dir/
+            video1.mp4
+            video2.mp4
+            ...
 
-    1. Multiple videos (subdirectories):
-       instance_data_dir/
-           video_001/
-               frame_000.png
-               frame_001.png
-           video_002/
-               frame_000.png
-               ...
-
-    2. Single video (flat directory):
-       instance_data_dir/
-           frame_000.png
-           frame_001.png
-           frame_002.png
-           ...
+    Or just:
+        instance_data_dir/
+            video.mp4
     """
 
     def __init__(self, instance_data_dir, num_frames=16, resolution=512):
@@ -36,79 +29,96 @@ class VideoDataset(Dataset):
         if not self.instance_data_dir.exists():
             raise ValueError(f"Directory does not exist: {instance_data_dir}")
 
-        # Check what's in the directory
-        all_items = list(self.instance_data_dir.iterdir())
-        subdirs = [d for d in all_items if d.is_dir()]
-        image_files = [f for f in all_items if f.suffix.lower() in ['.png', '.jpg', '.jpeg']]
+        # Find all MP4 files
+        self.video_paths = []
 
-        print(f"\nChecking {instance_data_dir}...")
-        print(f"  Found {len(subdirs)} subdirectories")
-        print(f"  Found {len(image_files)} image files")
+        # Check current directory
+        video_files = list(self.instance_data_dir.glob("*.mp4"))
+        self.video_paths.extend(video_files)
 
-        # Determine structure
-        if len(subdirs) > 0:
-            # Structure 1: Multiple video folders
-            self.video_paths = sorted(subdirs)
-            self.is_flat = False
-            print(f"  → Using multi-video structure: {len(self.video_paths)} videos")
-            for i, vp in enumerate(self.video_paths[:3]):
-                frames_in_video = len(list(vp.glob("*.png"))) + len(list(vp.glob("*.jpg")))
-                print(f"     Video {i}: {vp.name} ({frames_in_video} frames)")
-            if len(self.video_paths) > 3:
-                print(f"     ... and {len(self.video_paths) - 3} more videos")
+        # Also check subdirectories (one level deep)
+        for subdir in self.instance_data_dir.iterdir():
+            if subdir.is_dir():
+                video_files = list(subdir.glob("*.mp4"))
+                self.video_paths.extend(video_files)
 
-        elif len(image_files) > 0:
-            # Structure 2: Single video (flat)
-            self.video_paths = [self.instance_data_dir]
-            self.is_flat = True
-            print(f"  → Using flat structure: 1 video with {len(image_files)} frames")
+        self.video_paths = sorted(self.video_paths)
 
-        else:
+        if len(self.video_paths) == 0:
             raise ValueError(
-                f"No video data found in {instance_data_dir}!\n"
-                f"Expected either:\n"
-                f"  1. Subdirectories containing frames (video_001/, video_002/, ...)\n"
-                f"  2. Image files directly in the directory (.png, .jpg)\n"
-                f"Found: {len(all_items)} items but none were videos or images\n"
-                f"Items: {[str(item) for item in all_items[:10]]}"
+                f"No MP4 videos found in {instance_data_dir}!\n"
+                f"Expected: .mp4 files in the directory or subdirectories\n"
+                f"Found: {list(self.instance_data_dir.iterdir())[:10]}"
             )
+
+        print(f"\nFound {len(self.video_paths)} video(s):")
+        for i, vp in enumerate(self.video_paths[:5]):
+            cap = cv2.VideoCapture(str(vp))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+            print(f"  {i+1}. {vp.name} ({total_frames} frames, {fps:.1f} fps)")
+        if len(self.video_paths) > 5:
+            print(f"  ... and {len(self.video_paths) - 5} more videos")
 
     def __len__(self):
         return len(self.video_paths)
 
-    def __getitem__(self, idx):
-        video_path = self.video_paths[idx]
+    def load_video_frames(self, video_path, num_frames):
+        """Load frames from MP4 video."""
+        cap = cv2.VideoCapture(str(video_path))
 
-        # Load frames (support both .png and .jpg)
-        frame_paths = (
-            sorted(video_path.glob("*.png")) + 
-            sorted(video_path.glob("*.jpg")) +
-            sorted(video_path.glob("*.jpeg"))
-        )
-        frame_paths = sorted(frame_paths)[:self.num_frames]
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        if len(frame_paths) == 0:
-            raise ValueError(f"No image files found in {video_path}")
-
-        if len(frame_paths) < self.num_frames:
-            # Repeat last frame if not enough frames
-            frame_paths = frame_paths + [frame_paths[-1]] * (self.num_frames - len(frame_paths))
+        if total_frames < num_frames:
+            # If video is shorter, we'll repeat last frame
+            frame_indices = list(range(total_frames))
+        else:
+            # Sample evenly spaced frames
+            frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
 
         frames = []
-        for frame_path in frame_paths:
-            try:
-                img = Image.open(frame_path).convert("RGB")
-                img = img.resize((self.resolution, self.resolution))
-                img = np.array(img).astype(np.float32) / 255.0
-                img = (img - 0.5) / 0.5  # Normalize to [-1, 1]
-                frames.append(img)
-            except Exception as e:
-                raise ValueError(f"Error loading {frame_path}: {e}")
+        for idx in frame_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+
+            if not ret:
+                print(f"Warning: Could not read frame {idx} from {video_path}")
+                # Use last successfully read frame
+                if len(frames) > 0:
+                    frames.append(frames[-1])
+                continue
+
+            # Convert BGR to RGB
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Resize
+            frame = cv2.resize(frame, (self.resolution, self.resolution))
+
+            # Normalize to [-1, 1]
+            frame = frame.astype(np.float32) / 255.0
+            frame = (frame - 0.5) / 0.5
+
+            frames.append(frame)
+
+        cap.release()
+
+        # If we don't have enough frames, repeat last frame
+        while len(frames) < num_frames:
+            frames.append(frames[-1])
+
+        # Only take num_frames
+        frames = frames[:num_frames]
 
         # Stack: (F, H, W, C) → (F, C, H, W)
         frames = np.stack(frames)
         frames = torch.from_numpy(frames).permute(0, 3, 1, 2)
 
+        return frames
+
+    def __getitem__(self, idx):
+        video_path = self.video_paths[idx]
+        frames = self.load_video_frames(video_path, self.num_frames)
         return {"frames": frames}
 
 
