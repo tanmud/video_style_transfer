@@ -4,7 +4,7 @@ export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 export MOTION_LAYERS=2
 
 # Video Data Settings
-export VIDEO_DATA_DIR="./video_data"
+export VIDEO_DATA_DIR="./instance_videos/male_biker"
 export NUM_FRAMES=16  # Number of frames per video
 export RESOLUTION=512  # Video resolution (512 or 1024)
 
