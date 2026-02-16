@@ -15,7 +15,7 @@ export OUTPUT_DIR="models/male_biker/male_biker"
 export STEPS=10000
 
 # Training Settings
-export LEARNING_RATE=1e-4
+export LEARNING_RATE=2e-5
 export TRAIN_MOTION_ONLY=true
 
 # Training prompts (male_biker specific)

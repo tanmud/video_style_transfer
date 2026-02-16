@@ -72,14 +72,17 @@ class VideoDataset(Dataset):
 
         if total_frames < num_frames:
             # If video is shorter, we'll repeat last frame
+            print(f"Warning: {video_path.name} has only {total_frames} frames, need {num_frames}")
             frame_indices = list(range(total_frames))
         else:
             # Sample evenly spaced frames
-            frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
+            max_start = total_frames - num_frames
+            start_frame = np.random.randint(0, max_start + 1) if max_start > 0 else 0
 
         frames = []
-        for idx in frame_indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        for idx in range(start_frame, start_frame + num_frames):
+            frame_idx = min(frame_idx, total_frames - 1)  # Ensure we don't go out of bounds
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
 
             if not ret:
