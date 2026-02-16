@@ -8,7 +8,7 @@ import cv2
 
 class VideoDataset(Dataset):
     """
-    Video dataset that loads MP4 files directly.
+    Video dataset that loads MP4 files and samples random consecutive clips.
 
     Expected structure:
         instance_data_dir/
@@ -16,9 +16,9 @@ class VideoDataset(Dataset):
             video2.mp4
             ...
 
-    Or just:
-        instance_data_dir/
-            video.mp4
+    Key improvement: Samples CONSECUTIVE frames (e.g., frames 100-115)
+    instead of evenly spaced frames (e.g., 0, 40, 80, ...) for better
+    motion learning.
     """
 
     def __init__(self, instance_data_dir, num_frames=16, resolution=512):
@@ -57,36 +57,50 @@ class VideoDataset(Dataset):
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
+
+            # Calculate how many clips can be sampled
+            num_clips = max(1, total_frames - num_frames + 1)
             print(f"  {i+1}. {vp.name} ({total_frames} frames, {fps:.1f} fps)")
+            print(f"      → Can sample {num_clips} different {num_frames}-frame clips")
+
         if len(self.video_paths) > 5:
             print(f"  ... and {len(self.video_paths) - 5} more videos")
+
+        print(f"\n✅ Using RANDOM CONSECUTIVE CLIPS (proper motion learning)")
+        print(f"   Each epoch samples different {num_frames}-frame clips from each video")
 
     def __len__(self):
         return len(self.video_paths)
 
     def load_video_frames(self, video_path, num_frames):
-        """Load frames from MP4 video."""
+        """
+        Load consecutive frames from a random position in the video.
+        This is KEY for learning motion - we need continuous sequences!
+        """
         cap = cv2.VideoCapture(str(video_path))
-
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         if total_frames < num_frames:
-            # If video is shorter, we'll repeat last frame
+            # Video is shorter than requested frames
             print(f"Warning: {video_path.name} has only {total_frames} frames, need {num_frames}")
-            frame_indices = list(range(total_frames))
+            start_frame = 0
+            # We'll repeat last frame to fill
         else:
-            # Sample evenly spaced frames
+            # FIXED: Sample random consecutive clip
             max_start = total_frames - num_frames
-            start_frame = np.random.randint(0, max_start + 1) if max_start > 0 else 0
+            start_frame = np.random.randint(0, max_start + 1)
 
+        # Load consecutive frames starting from start_frame
         frames = []
-        for idx in range(start_frame, start_frame + num_frames):
-            frame_idx = min(frame_idx, total_frames - 1)  # Ensure we don't go out of bounds
+        for frame_idx in range(start_frame, start_frame + num_frames):
+            # Make sure we don't go past video length
+            frame_idx = min(frame_idx, total_frames - 1)
+
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
 
             if not ret:
-                print(f"Warning: Could not read frame {idx} from {video_path}")
+                print(f"Warning: Could not read frame {frame_idx} from {video_path}")
                 # Use last successfully read frame
                 if len(frames) > 0:
                     frames.append(frames[-1])
@@ -109,9 +123,6 @@ class VideoDataset(Dataset):
         # If we don't have enough frames, repeat last frame
         while len(frames) < num_frames:
             frames.append(frames[-1])
-
-        # Only take num_frames
-        frames = frames[:num_frames]
 
         # Stack: (F, H, W, C) → (F, C, H, W)
         frames = np.stack(frames)
