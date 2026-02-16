@@ -66,8 +66,7 @@ class VideoDataset(Dataset):
         if len(self.video_paths) > 5:
             print(f"  ... and {len(self.video_paths) - 5} more videos")
 
-        print(f"\n✅ Using RANDOM CONSECUTIVE CLIPS (proper motion learning)")
-        print(f"   Each epoch samples different {num_frames}-frame clips from each video")
+        print(f"Each epoch samples {num_frames}-frame clips from each video")
 
     def __len__(self):
         return len(self.video_paths)

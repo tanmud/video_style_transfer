@@ -12,10 +12,10 @@ export NUM_FRAMES=16  # Number of frames to sample per video
 export RESOLUTION=512  # Lower resolution for video (memory)
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker/male_biker"
-export STEPS=10000
+export STEPS=500
 
 # Training Settings
-export LEARNING_RATE=2e-5
+export LEARNING_RATE=5e-6
 export TRAIN_MOTION_ONLY=true
 
 # Training prompts (male_biker specific)
@@ -55,7 +55,7 @@ accelerate launch train_animatediff.py \
     --lr_warmup_steps=0 \
     --max_train_steps="$STEPS" \
     --checkpointing_steps=500 \
-    --mixed_precision="fp16" \
+    --mixed_precision="no" \
     --seed="0" \
     --validation_content="${VALID_CONTENT}" \
     --validation_style="${VALID_STYLE}" \
