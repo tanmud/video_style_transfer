@@ -2,7 +2,6 @@ export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 
 # Motion Module Settings
 export MOTION_LAYERS=2
-export NUM=1
 
 # Paths
 export OUTPUT_DIR="models/male_biker/male_biker"
@@ -68,7 +67,6 @@ accelerate launch inference_animatediff.py \
     --pretrained_model_name_or_path="$MODEL_NAME" \
     --motion_module_path="$MOTION_MODULE_PATH" \
     --motion_module_layers=$MOTION_LAYERS \
-    --num="${NUM}" \
     --save_dir="$SAVE_DIR" \
     --num_frames=$NUM_FRAMES \
     --num_inference_steps=$NUM_INFERENCE_STEPS \

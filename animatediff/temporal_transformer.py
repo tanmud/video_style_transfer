@@ -31,7 +31,6 @@ class TemporalTransformerBlock(nn.Module):
     """
     Single temporal transformer block with self-attention across frames.
 
-    This is the correct way to do temporal attention:
     1. LayerNorm
     2. Self-attention across F (frame) dimension  
     3. Residual connection
