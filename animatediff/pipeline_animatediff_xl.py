@@ -1,5 +1,5 @@
 import torch
-from typing import Optional, Union, List, Callable, Dict, Any
+from typing import Optional, Union, List, Callable, Dict, Any, Tuple
 from diffusers import StableDiffusionXLPipeline
 from diffusers.pipelines.stable_diffusion_xl import StableDiffusionXLPipelineOutput
 from animatediff.utils import load_unet_with_motion
@@ -45,6 +45,25 @@ class AnimateDiffUnZipLoRAPipeline(StableDiffusionXLPipeline):
             print("No motion_module_path provided - using base UNet without motion")
 
         return pipe
+
+    def _get_add_time_ids(
+        self,
+        original_size: Tuple[int, int],
+        crops_coords_top_left: Tuple[int, int],
+        target_size: Tuple[int, int],
+        dtype: torch.dtype,
+    ):
+        """
+        Override to handle time IDs for SDXL.
+
+        This fixes issues with motion module loading changing UNet config.
+        """
+        add_time_ids = list(original_size + crops_coords_top_left + target_size)
+
+        # Convert to tensor
+        add_time_ids = torch.tensor([add_time_ids], dtype=dtype)
+
+        return add_time_ids
 
     def prepare_latents_video(
         self,
