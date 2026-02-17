@@ -56,6 +56,20 @@ def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, 
 
     return prompt_embeds, pooled_prompt_embeds
 
+def save_video_mp4(frames, output_path, fps):
+    """Save frames as MP4 video."""
+    try:
+        import imageio
+        frames_np = [np.array(frame) for frame in frames]
+        imageio.mimsave(
+            output_path, frames_np, fps=fps,
+            codec='libx264', quality=8, pixelformat='yuv420p'
+        )
+        return True
+    except ImportError:
+        print("⚠️  imageio not found, install: pip install imageio-ffmpeg")
+        return False
+
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -252,19 +266,19 @@ def main(args):
             os.makedirs(args.save_dir, exist_ok=True)
 
             # Save as GIF
-            output_path = os.path.join(args.save_dir, f"video_{idx:03d}.gif")
-            frames[0].save(
-                output_path,
-                save_all=True,
-                append_images=frames[1:],
-                duration=1000//args.fps,
-                loop=0
-            )
-            print(f"Saved video to: {output_path}")
+            output_path = os.path.join(args.save_dir, f"video_{idx:03d}.mp4")
+            if save_video_mp4(frames, output_path, args.fps):
+                print(f"✅ Saved MP4 video to: {output_path}")
+            else:
+                # Fallback to GIF
+                output_path = output_path.replace('.mp4', '.gif')
+                frames[0].save(output_path, save_all=True, append_images=frames[1:], 
+                            duration=1000//args.fps, loop=0)
+                print(f"⚠️  Saved as GIF: {output_path}")
 
-    print("\n" + "="*80)
-    print("All videos generated successfully!")
-    print("="*80)
+                print("\n" + "="*80)
+                print("All videos generated successfully!")
+                print("="*80)
 
 
 if __name__ == "__main__":
