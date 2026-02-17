@@ -69,7 +69,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="vae",
-        torch_dtype=torch.float16,
+        torch_dtype=torch.float32,
     )
     vae.requires_grad_(False)
     vae.to(device)
@@ -106,7 +106,7 @@ def main(args):
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_module_path=args.motion_module_path,
         motion_module_kwargs={"num_layers": args.motion_module_layers},
-        torch_dtype=torch.float16,
+        torch_dtype=torch.float32,
         device=device,
     )
     unet.to(device)
@@ -170,7 +170,7 @@ def main(args):
                 torch.tensor([args.height, args.width]),  # original_size
                 torch.tensor([0, 0]),                      # crops_coords_top_left
                 torch.tensor([args.height, args.width]),  # target_size
-            ]).unsqueeze(0).to(device, dtype=torch.float16)
+            ]).unsqueeze(0).to(device, dtype=torch.float32)
 
             added_cond_kwargs = {
                 "text_embeds": pooled_embeds,
@@ -181,7 +181,7 @@ def main(args):
             latents = torch.randn(
                 (args.num_frames, 4, args.height // 8, args.width // 8),
                 device=device,
-                dtype=torch.float16,
+                dtype=torch.float32,
             )
 
             # Scale by scheduler's init noise sigma
@@ -240,7 +240,7 @@ def main(args):
 
             frames = []
             for i in range(args.num_frames):
-                frame_latent = latents[i:i+1].to(torch.float16)
+                frame_latent = latents[i:i+1].to(torch.float32)
                 frame = vae.decode(frame_latent).sample
                 frame = (frame / 2 + 0.5).clamp(0, 1)
                 frame = frame.cpu().permute(0, 2, 3, 1).numpy()[0]
