@@ -5,7 +5,7 @@ from diffusers.pipelines.stable_diffusion_xl import StableDiffusionXLPipelineOut
 from animatediff.utils import load_unet_with_motion
 
 
-class AnimateDiffXLPipeline(StableDiffusionXLPipeline):
+class AnimateDiffUnZipLoRAPipeline(StableDiffusionXLPipeline):
     """
     Pipeline for video generation using AnimateDiff with SDXL.
 
