@@ -16,7 +16,7 @@ export NUM_INFERENCE_STEPS=50
 export GUIDANCE_SCALE=7.5
 export HEIGHT=512
 export WIDTH=512
-export FPS=8
+export FPS=20
 
 # Validation Prompts (combined content + style)
 export VALID_PROMPTS=(
