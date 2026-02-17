@@ -74,8 +74,6 @@ accelerate launch inference_animatediff.py \
     --height=$HEIGHT \
     --width=$WIDTH \
     --fps=$FPS \
-    --validation_prompt_content_recontext="${VALID_CONTENT_RECON_PROMPT}" \
-    --validation_prompt_style="${VALID_STYLE_PROMPT}" \
     --validation_prompt="${VALID_PROMPT}" \
     --validation_prompt_style_forward="${VALID_STYLE}" \
     --validation_prompt_content_forward="${VALID_CONTENT}"
