@@ -231,10 +231,6 @@ def main(args):
                 )
                 timesteps = timesteps.repeat_interleave(num_frames)
 
-                print("Latents shape:", latents.shape)
-                print("Timesteps shape:", timesteps.shape)
-                print("encoder_hidden_states shape:", instance_prompt_embeds.shape)
-
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                 # USE THE PROMPTS (randomly choose which one to condition on)

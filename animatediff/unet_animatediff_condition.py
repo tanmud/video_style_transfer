@@ -151,6 +151,8 @@ class UNetAnimateDiffConditionModel(UNet2DConditionModel):
         # Time embedding
         t_emb = self.time_proj(timestep)
         emb = self.time_embedding(t_emb)
+        print(f"Shape of t_emb {t_emb.shape}")   
+        print(f"Shape of emb {emb.shape}")   
 
         # Added cond kwargs for SDXL
         added_cond_kwargs = kwargs.get("added_cond_kwargs", {})
