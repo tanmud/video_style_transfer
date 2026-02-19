@@ -192,6 +192,7 @@ def main(args):
             }
 
             # Initialize random latents for all frames
+            batch_size = 1  
             latents = torch.randn(
                 (args.num_frames, 4, args.height // 8, args.width // 8),
                 device=device,
@@ -201,7 +202,6 @@ def main(args):
             # Scale by scheduler's init noise sigma
             latents = latents * scheduler.init_noise_sigma
 
-            # Denoising loop (SAME AS TRAINING!)
             print(f"Generating {args.num_frames} frames...")
             for t in tqdm(scheduler.timesteps):
                 # Expand for classifier-free guidance
@@ -265,10 +265,9 @@ def main(args):
             import os
             os.makedirs(args.save_dir, exist_ok=True)
 
-            # Save as GIF
             output_path = os.path.join(args.save_dir, f"video_{idx:03d}.mp4")
             if save_video_mp4(frames, output_path, args.fps):
-                print(f"✅ Saved MP4 video to: {output_path}")
+                print(f"Saved MP4 video to: {output_path}")
             else:
                 # Fallback to GIF
                 output_path = output_path.replace('.mp4', '.gif')
