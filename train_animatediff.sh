@@ -13,7 +13,6 @@ export RESOLUTION=512  # Lower resolution for video (memory)
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker/male_biker"
 export STEPS=2000
-export MAX_STEPS=10000
 
 # Training Settings
 export LEARNING_RATE=2e-5
@@ -54,8 +53,7 @@ accelerate launch train_animatediff.py \
     --report_to="wandb" \
     --lr_scheduler="constant" \
     --lr_warmup_steps=0 \
-    --num_train_steps="$STEPS" \
-    --max_train_steps="$MAX_STEPS" \
+    --max_train_steps="$STEPS" \
     --checkpointing_steps=500 \
     --mixed_precision="no" \
     --seed="0" \
