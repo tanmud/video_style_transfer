@@ -30,46 +30,50 @@ class VideoDataset(Dataset):
             raise ValueError(f"Directory does not exist: {instance_data_dir}")
 
         # Find all MP4 files
-        self.video_paths = []
-
-        # Check current directory
+        video_paths = []
         video_files = list(self.instance_data_dir.glob("*.mp4"))
-        self.video_paths.extend(video_files)
-
-        # Also check subdirectories (one level deep)
+        video_paths.extend(video_files)
         for subdir in self.instance_data_dir.iterdir():
             if subdir.is_dir():
                 video_files = list(subdir.glob("*.mp4"))
-                self.video_paths.extend(video_files)
+                video_paths.extend(video_files)
+        video_paths = sorted(video_paths)
 
-        self.video_paths = sorted(self.video_paths)
-
-        if len(self.video_paths) == 0:
+        if len(video_paths) == 0:
             raise ValueError(
                 f"No MP4 videos found in {instance_data_dir}!\n"
                 f"Expected: .mp4 files in the directory or subdirectories\n"
                 f"Found: {list(self.instance_data_dir.iterdir())[:10]}"
             )
 
-        print(f"\nFound {len(self.video_paths)} video(s):")
-        for i, vp in enumerate(self.video_paths[:5]):
+        # Build clip index — one entry per possible starting position
+        self.clip_index = []  # list of (video_path, total_frames)
+        
+        print(f"\nFound {len(video_paths)} video(s):")
+        for i, vp in enumerate(video_paths[:5]):
             cap = cv2.VideoCapture(str(vp))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
 
-            # Calculate how many clips can be sampled
             num_clips = max(1, total_frames - num_frames + 1)
-            print(f"  {i+1}. {vp.name} ({total_frames} frames, {fps:.1f} fps)")
-            print(f"      → Can sample {num_clips} different {num_frames}-frame clips")
+            for _ in range(num_clips):
+                self.clip_index.append((vp, total_frames))
 
-        if len(self.video_paths) > 5:
-            print(f"  ... and {len(self.video_paths) - 5} more videos")
+        if len(video_paths) > 5:
+            # Still add clips for remaining videos even if not printed
+            for vp in video_paths[5:]:
+                cap = cv2.VideoCapture(str(vp))
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+                num_clips = max(1, total_frames - num_frames + 1)
+                for _ in range(num_clips):
+                    self.clip_index.append((vp, total_frames))
 
-        print(f"Each epoch samples {num_frames}-frame clips from each video")
+
 
     def __len__(self):
-        return len(self.video_paths)
+        return len(self.clip_index)
 
     def load_video_frames(self, video_path, num_frames):
         """
@@ -85,7 +89,6 @@ class VideoDataset(Dataset):
             start_frame = 0
             # We'll repeat last frame to fill
         else:
-            # FIXED: Sample random consecutive clip
             max_start = total_frames - num_frames
             start_frame = np.random.randint(0, max_start + 1)
 
@@ -108,7 +111,6 @@ class VideoDataset(Dataset):
             # Convert BGR to RGB
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # Resize
             frame = cv2.resize(frame, (self.resolution, self.resolution))
 
             # Normalize to [-1, 1]

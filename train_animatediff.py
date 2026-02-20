@@ -310,9 +310,13 @@ def main(args):
                         )
 
             if global_step >= args.max_train_steps:
+                print(f"\nInner reached max training steps {args.max_train_steps}")
+                print(f"global_step: {global_step}")
                 break
 
         if global_step >= args.max_train_steps:
+            print(f"\nOuter reached max training steps {args.max_train_steps}")
+            print(f"global_step: {global_step}")
             break
 
     # Save final
