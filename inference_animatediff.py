@@ -273,7 +273,7 @@ def main(args):
                 output_path = output_path.replace('.mp4', '.gif')
                 frames[0].save(output_path, save_all=True, append_images=frames[1:], 
                             duration=1000//args.fps, loop=0)
-                print(f"⚠️  Saved as GIF: {output_path}")
+                print(f"Saved as GIF: {output_path}")
 
                 print("\n" + "="*80)
                 print("All videos generated successfully!")
