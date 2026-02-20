@@ -8,7 +8,7 @@ export WANDB_NAME="animatediff_male_biker"
 export WANDB_MODE="offline"
 
 # Video Data Settings
-export NUM_FRAMES=16  # Number of frames to sample per video
+export NUM_FRAMES=1  # Number of frames to sample per video
 export RESOLUTION=512  # Lower resolution for video (memory)
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker/male_biker"
