@@ -53,7 +53,7 @@ accelerate launch train_animatediff.py \
     --report_to="wandb" \
     --lr_scheduler="constant" \
     --lr_warmup_steps=0 \
-    --max_train_steps="$STEPS" \
+    --num_train_steps="$STEPS" \
     --checkpointing_steps=500 \
     --mixed_precision="no" \
     --seed="0" \
