@@ -132,10 +132,9 @@ class VideoDataset(Dataset):
         return frames
 
     def __getitem__(self, idx):
-        video_path = self.video_paths[idx]
+        video_path, _ = self.clip_index[idx]
         frames = self.load_video_frames(video_path, self.num_frames)
         return {"frames": frames}
-
 
 def collate_fn(examples):
     """Collate batch of videos."""
