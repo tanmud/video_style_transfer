@@ -12,7 +12,8 @@ export NUM_FRAMES=16  # Number of frames to sample per video
 export RESOLUTION=512  # Lower resolution for video (memory)
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker/male_biker"
-export STEPS=500
+export STEPS=2000
+export MAX_STEPS=10000
 
 # Training Settings
 export LEARNING_RATE=2e-5
@@ -35,7 +36,7 @@ export VALID_CONTENT_PROMPT="a video of a biker in park"
 export VALID_STYLE_PROMPT="A biker in cartoon style"
 
 # Validation settings
-export VALIDATION_STEPS=500  # How often to run validation
+export VALIDATION_STEPS=10000  # How often to run validation
 
 accelerate launch train_animatediff.py \
     --pretrained_model_name_or_path=$MODEL_NAME \
@@ -54,6 +55,7 @@ accelerate launch train_animatediff.py \
     --lr_scheduler="constant" \
     --lr_warmup_steps=0 \
     --num_train_steps="$STEPS" \
+    --max_train_steps="$MAX_STEPS" \
     --checkpointing_steps=500 \
     --mixed_precision="no" \
     --seed="0" \
