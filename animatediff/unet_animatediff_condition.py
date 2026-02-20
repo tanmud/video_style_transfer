@@ -171,6 +171,8 @@ class UNetAnimateDiffConditionModel(UNet2DConditionModel):
             add_embeds = torch.concat([text_embeds, time_embeds], dim=-1)
             aug_emb = self.add_embedding(add_embeds)
 
+        print(emb.shape)
+        print(aug_emb.shape if aug_emb is not None else "No aug_emb")
         emb = emb.repeat_interleave(num_frames, dim=0)  # (B*F, dim)
         emb = emb + aug_emb if aug_emb is not None else emb
 
