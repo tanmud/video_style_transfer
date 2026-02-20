@@ -173,7 +173,7 @@ class UNetAnimateDiffConditionModel(UNet2DConditionModel):
 
         print(emb.shape)
         print(aug_emb.shape if aug_emb is not None else "No aug_emb")
-        emb = emb.repeat(batch_frames, dim=0)  # (B*F, dim)
+        emb = emb.repeat(batch_frames, 1)  # (B*F, dim)
         emb = emb + aug_emb if aug_emb is not None else emb
 
         # Initial conv
