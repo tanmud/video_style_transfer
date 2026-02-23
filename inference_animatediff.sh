@@ -4,13 +4,13 @@ export MOTION_LAYERS=2
 # Paths
 export STAGE2_DIR="models/male_biker_video"
 export SAVE_DIR="output/male_biker"
-export MOTION_MODULE_PATH="${STAGE2_DIR}/checkpoint-final"
+export MOTION_MODULE_PATH="${STAGE2_DIR}/checkpoint-500" #change this later
 
 # Stage-1 UnZipLoRA outputs
-export UNZIPLORA_CONTENT="models/male_biker_image/content"
-export UNZIPLORA_STYLE="models/male_biker_image/style"
-export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/mergercontent.pth"
-export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/mergerstyle.pth"
+export UNZIPLORA_CONTENT="models/male_biker_image/male_biker_image_content"
+export UNZIPLORA_STYLE="models/male_biker_image/male_biker_image_style"
+export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/male_biker_image_merger_content.pth"
+export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_style.pth"
 
 # Generation settings
 export NUM_FRAMES=16
