@@ -228,10 +228,16 @@ def parse_args(input_args=None):
         help="The config of the Dataset, leave as None if there's only one config.",
     )
     parser.add_argument(
-        "--instance_data_dir",
+        "--instance_video",
         type=str,
-        default=None,
-        help=("A folder containing the training data. "),
+        required=True,
+        help="Path to instance .mp4 video file. Images are NOT accepted.",
+    )
+    parser.add_argument(
+        "--num_instance_frames",
+        type=int,
+        default=1,
+        help="Frames to extract from video for LoRA training. Keep 1-5.",
     )
     parser.add_argument(
         "--cache_dir",
@@ -806,13 +812,20 @@ def parse_args(input_args=None):
     else:
         args = parser.parse_args()
 
-    if args.dataset_name is None and args.instance_data_dir is None:
-        raise ValueError("Specify either `--dataset_name` or `--instance_data_dir`")
-
-    if args.dataset_name is not None and args.instance_data_dir is not None:
+    if not args.instance_video:
+        raise ValueError("--instance_video is required (path to .mp4 file)")
+    if not args.instance_video.lower().endswith(".mp4"):
         raise ValueError(
-            "Specify only one of `--dataset_name` or `--instance_data_dir`"
+            f"--instance_video must be a .mp4 file. Got: {args.instance_video}\n"
+            "This script does NOT accept image directories."
         )
+    if not os.path.isfile(args.instance_video):
+        raise FileNotFoundError(f"Video not found: {args.instance_video}")
+    if not (1 <= args.num_instance_frames <= 5):
+        raise ValueError(
+            f"--num_instance_frames must be between 1 and 5. Got: {args.num_instance_frames}"
+        )
+
 
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -853,7 +866,7 @@ class DreamBoothDataset(Dataset):
 
     def __init__(
         self,
-        instance_data_root,
+        instance_data_root,   # path to .mp4 file (not a directory)
         instance_prompt,
         class_prompt,
         device,
@@ -864,7 +877,8 @@ class DreamBoothDataset(Dataset):
         size=1024,
         repeats=1,
         center_crop=False,
-        one_shot=False,
+        one_shot=False,       # unused, kept for call-site compatibility
+        num_frames=1,
     ):
         self.size = size
         self.center_crop = center_crop
@@ -879,47 +893,48 @@ class DreamBoothDataset(Dataset):
         if args.dataset_name is not None:
             raise NotImplementedError
         else:
-            self.instance_data_root = Path(instance_data_root)
-            if not self.instance_data_root.exists():
-                raise ValueError("Instance images root doesn't exists.")
-            
-            def _load_instance_images(data_root: Path, fps_sample: int = 2):
-                """Load images from a directory, or extract frames from any .mp4 found."""
-                video_files = sorted(data_root.glob("*.mp4"))
-                if video_files:
-                    try:
-                        import cv2
-                    except ImportError:
-                        raise ImportError("pip install opencv-python to load video directly")
-                    images = []
-                    for video_path in video_files:
-                        cap = cv2.VideoCapture(str(video_path))
-                        native_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-                        # Sample every Nth frame to approximate fps_sample
-                        frame_interval = max(1, round(native_fps / fps_sample))
-                        frame_idx = 0
-                        while True:
-                            ret, frame = cap.read()
-                            if not ret:
-                                break
-                            if frame_idx % frame_interval == 0:
-                                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                                images.append(Image.fromarray(frame_rgb))
-                            frame_idx += 1
-                        cap.release()
-                    print(f"Extracted {len(images)} frames from {len(video_files)} video(s) at ~{fps_sample}fps")
-                    return images
-                else:
-                    return [Image.open(path) for path in sorted(data_root.iterdir())
-                            if path.suffix.lower() in {'.jpg', '.jpeg', '.png', '.webp'}]
+            # ── MP4-only frame extraction ─────────────────────────────────────────────
+            video_path = str(instance_data_root)
+            if not os.path.isfile(video_path):
+                raise FileNotFoundError(f"Video not found: {video_path}")
+            if not video_path.lower().endswith(".mp4"):
+                raise ValueError(
+                    f"Expected an .mp4 file, got: {video_path}\n"
+                    "This training script does NOT accept image directories."
+                )
+            try:
+                import cv2
+            except ImportError:
+                raise ImportError("pip install opencv-python  — required to read .mp4 files")
 
-            instance_images = _load_instance_images(self.instance_data_root)
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise RuntimeError(f"cv2 could not open video: {video_path}")
 
-            if one_shot is True: 
-                selected_image = random.choice(instance_images)
-                instance_images = [selected_image]
-                print(selected_image)
-            self.custom_instance_prompts = None
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if total_frames < 1:
+                raise ValueError(f"Video reports 0 frames: {video_path}")
+
+            # Evenly-spaced indices across the full duration
+            n = min(num_frames, total_frames)
+            if n == 1:
+                indices = [total_frames // 2]   # single frame → pick the middle
+            else:
+                step = (total_frames - 1) / (n - 1)
+                indices = [round(i * step) for i in range(n)]
+
+            instance_images = []
+            for frame_idx in indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    raise RuntimeError(f"Could not read frame {frame_idx} from {video_path}")
+                instance_images.append(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+            cap.release()
+            print(f"[VideoDataset] Extracted {len(instance_images)} frame(s) "
+                f"from '{video_path}' at indices {indices}")
+            # ─────────────────────────────────────────────────────────────────────────
+
 
         self.instance_images = []
         self.style_vector = []
@@ -1652,7 +1667,7 @@ def main(args):
     instance_prompt = args.instance_prompt
     # Dataset and DataLoaders creation:
     train_dataset = DreamBoothDataset(
-        instance_data_root=args.instance_data_dir,
+        instance_data_root=args.instance_video,
         instance_prompt=instance_prompt,
         class_prompt=args.class_prompt,
         device=accelerator.device,
@@ -1664,6 +1679,7 @@ def main(args):
         repeats=args.repeats,
         center_crop=args.center_crop,
         one_shot=args.with_one_shot, 
+        num_frames=args.num_instance_frames,
     )
 
     train_dataloader = torch.utils.data.DataLoader(

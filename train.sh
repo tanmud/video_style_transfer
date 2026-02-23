@@ -17,7 +17,8 @@ export WANDB_MODE="offline"
 # automatically (requires the DreamBoothDataset patch above).
 # Or pre-extract manually:
 #   ffmpeg -i male_biker.mp4 -vf fps=2 instance_data/male_biker/frame_%04d.jpg
-export INSTANCE_DIR="instance_data/male_biker"   # dir with frames OR single .mp4
+export INSTANCE_VIDEO="instance_data/male_biker/male_biker.mp4"
+export NUM_INSTANCE_FRAMES=1   # 1 = middle frame; use 3-5 for style variety
 
 # Output — Stage 2 will look for:
 #   models/male_biker_image/male_biker_image_content/
@@ -41,7 +42,8 @@ export VALID_STYLE_PROMPT="A dog running in cartoon style"
 accelerate launch train_unziplora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --name=$WANDB_NAME \
-  --instance_data_dir=$INSTANCE_DIR \
+  --instance_video="${INSTANCE_VIDEO}" \
+  --num_instance_frames=$NUM_INSTANCE_FRAMES \
   --output_dir=$OUTPUT_DIR \
   --instance_prompt="${PROMPT}" \
   --content_forward_prompt="${CONTENT_FORWARD_PROMPT}" \
