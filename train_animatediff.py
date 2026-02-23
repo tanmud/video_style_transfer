@@ -9,22 +9,20 @@ from diffusers.optimization import get_scheduler
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 from tqdm.auto import tqdm
 
-# Import our utilities
 from animatediff.utils import (
     load_unet_with_motion,
     freeze_spatial_layers,
-    unfreeze_all_layers,
     print_parameter_summary,
     save_checkpoint,
     get_trainable_parameters,
 )
-
-# Import flexible video dataset
 from animatediff.video_dataset import VideoDataset, collate_fn
+# UnZipLoRA — spatial LoRA injection + forward type control
+from unziplora_unet.utils import insert_unziplora_to_unet, unziplora_set_forward_type
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
-    """Encode text prompt for SDXL (dual text encoders)."""
+    """Encode text prompt for SDXL dual text encoders."""
     text_inputs = tokenizer(
         prompt,
         padding="max_length",
@@ -39,36 +37,28 @@ def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, 
         truncation=True,
         return_tensors="pt",
     )
-
     prompt_embeds = text_encoder(
         text_inputs.input_ids.to(device),
         output_hidden_states=True,
     ).hidden_states[-2]
-
     pooled_prompt_embeds = text_encoder_2(
         text_inputs_2.input_ids.to(device),
         output_hidden_states=True,
     )[0]
-
     prompt_embeds_2 = text_encoder_2(
         text_inputs_2.input_ids.to(device),
         output_hidden_states=True,
     ).hidden_states[-2]
-
-    # Concatenate
     prompt_embeds = torch.cat([prompt_embeds, prompt_embeds_2], dim=-1)
-
     return prompt_embeds, pooled_prompt_embeds
 
 
 def main(args):
-    # Initialize accelerator
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
     )
 
-    # Load models
     if accelerator.is_main_process:
         print("Loading models...")
 
@@ -83,12 +73,10 @@ def main(args):
 
     # Text encoders
     text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
+        args.pretrained_model_name_or_path, subfolder="text_encoder"
     )
     text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder_2",
+        args.pretrained_model_name_or_path, subfolder="text_encoder_2"
     )
     text_encoder.requires_grad_(False)
     text_encoder_2.requires_grad_(False)
@@ -97,15 +85,13 @@ def main(args):
 
     # Tokenizers
     tokenizer = CLIPTokenizer.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="tokenizer",
+        args.pretrained_model_name_or_path, subfolder="tokenizer"
     )
     tokenizer_2 = CLIPTokenizer.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="tokenizer_2",
+        args.pretrained_model_name_or_path, subfolder="tokenizer_2"
     )
 
-    # UNet with motion modules
+    # ── Step 1: Load UNet with randomly-initialized temporal transformers ──────
     if accelerator.is_main_process:
         print("\nLoading UNet with motion modules...")
     unet = load_unet_with_motion(
@@ -115,22 +101,33 @@ def main(args):
         device=accelerator.device,
     )
 
-    # Freeze/unfreeze
-    if args.train_motion_only:
-        freeze_spatial_layers(unet)
-    else:
-        unfreeze_all_layers(unet)
+    # ── Step 2: Inject Stage-1 UnZipLoRA spatial weights ─────────────────────
+    # Must happen BEFORE freezing so LoRA params exist when freeze runs.
+    if accelerator.is_main_process:
+        print("\nInjecting UnZipLoRA spatial weights (Stage 1 outputs)...")
+    insert_unziplora_to_unet(
+        unet,
+        args.unziplora_content_path,
+        args.unziplora_style_path,
+        args.unziplora_content_weight_path,
+        args.unziplora_style_weight_path,
+    )
+    # Use both content + style pathways during training
+    unziplora_set_forward_type(unet, type="both")
 
+    # ── Step 3: Freeze everything except temporal transformers ────────────────
+    # freeze_spatial_layers freezes all params whose name does NOT contain
+    # "temporal" — this includes the LoRA params (spatial attention layers).
+    freeze_spatial_layers(unet)
     if accelerator.is_main_process:
         print_parameter_summary(unet)
 
-    # Noise scheduler
+    # Noise scheduler (DDPM is fine for training)
     noise_scheduler = DDPMScheduler.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="scheduler",
+        args.pretrained_model_name_or_path, subfolder="scheduler"
     )
 
-    # Optimizer
+    # Optimizer — only temporal params have requires_grad=True after freeze
     trainable_params = get_trainable_parameters(unet)
     optimizer = torch.optim.AdamW(
         trainable_params,
@@ -140,7 +137,7 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    # Dataset (with better error messages)
+    # Dataset
     dataset = VideoDataset(
         args.instance_data_dir,
         num_frames=args.num_frames,
@@ -162,124 +159,103 @@ def main(args):
         num_training_steps=args.max_train_steps,
     )
 
-    # Prepare
     unet, optimizer, dataloader, lr_scheduler = accelerator.prepare(
         unet, optimizer, dataloader, lr_scheduler
     )
 
-    # PRE-COMPUTE TEXT EMBEDDINGS (like your UnzipLoRA training)
+    # ── Pre-compute text embeddings (only 2: instance + uncond) ──────────────
     if accelerator.is_main_process:
-        print("\nPre-computing text embeddings for prompts...")
-
+        print("\nPre-computing text embeddings...")
     with torch.no_grad():
-        # Instance prompt (main training prompt)
         instance_prompt_embeds, instance_pooled_embeds = encode_prompt(
             text_encoder, text_encoder_2, tokenizer, tokenizer_2,
-            args.instance_prompt, accelerator.device
+            args.instance_prompt, accelerator.device,
         )
-
-        # Content forward prompt
-        content_prompt_embeds, content_pooled_embeds = encode_prompt(
+        # Real empty-string embeddings for 10% CFG dropout
+        uncond_prompt_embeds, uncond_pooled_embeds = encode_prompt(
             text_encoder, text_encoder_2, tokenizer, tokenizer_2,
-            args.content_forward_prompt, accelerator.device
+            "", accelerator.device,
         )
-
-        # Style forward prompt
-        style_prompt_embeds, style_pooled_embeds = encode_prompt(
-            text_encoder, text_encoder_2, tokenizer, tokenizer_2,
-            args.style_forward_prompt, accelerator.device
-        )
+    if accelerator.is_main_process:
+        print(f"  Instance prompt : {args.instance_prompt}")
+        print(f"  CFG dropout rate: 10%")
 
     if accelerator.is_main_process:
-        print(f"  Instance prompt: {args.instance_prompt}")
-        print(f"  Content forward: {args.content_forward_prompt}")
-        print(f"  Style forward: {args.style_forward_prompt}")
+        accelerator.init_trackers(args.name, config=vars(args))
 
-    # Initialize trackers
-    if accelerator.is_main_process:
-        config = vars(args)
-        accelerator.init_trackers(args.name, config=config)
-
-    # Training loop
+    # ── Training loop ─────────────────────────────────────────────────────────
     if accelerator.is_main_process:
         print(f"\nStarting training for {args.max_train_steps} steps\n")
 
     global_step = 0
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(args.max_train_steps),
+        disable=not accelerator.is_local_main_process,
+    )
 
     for epoch in range(args.num_train_epochs):
         for batch in dataloader:
             with accelerator.accumulate(unet):
-                # Get frames
                 frames = batch["frames"].to(accelerator.device)
-                batch_size, num_frames = frames.shape[0], frames.shape[1]
+                batch_size = frames.shape[0]
+                num_frames = frames.shape[1]
 
-                # Flatten for VAE: (B, F, C, H, W) → (B*F, C, H, W)
+                # (B, F, C, H, W) → (B*F, C, H, W) for VAE
                 frames_flat = frames.reshape(-1, *frames.shape[2:]).to(dtype=vae.dtype)
 
-                # Encode to latents
                 with torch.no_grad():
                     latents = vae.encode(frames_flat).latent_dist.sample()
                     latents = latents * vae.config.scaling_factor
 
-                # Add noise
                 noise = torch.randn_like(latents)
+                # One timestep per batch item; repeat across frames for add_noise
                 timesteps = torch.randint(
                     0, noise_scheduler.config.num_train_timesteps,
-                    (batch_size,),
-                    device=latents.device,
+                    (batch_size,), device=latents.device,
                 )
-                timesteps = timesteps.repeat_interleave(num_frames)
+                timesteps_expanded = timesteps.repeat_interleave(num_frames)
+                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps_expanded)
 
-                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-
-                # USE THE PROMPTS (randomly choose which one to condition on)
-                prompt_choice = torch.rand(1).item()
-                if prompt_choice < 0.33:
-                    # Use instance prompt (combined)
+                # 10% CFG dropout: condition on empty string instead of instance prompt
+                use_uncond = torch.rand(1).item() < 0.1
+                if use_uncond:
+                    encoder_hidden_states = uncond_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = uncond_pooled_embeds.repeat(batch_size, 1)
+                else:
                     encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)
                     pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)
-                elif prompt_choice < 0.66:
-                    # Use content forward prompt
-                    encoder_hidden_states = content_prompt_embeds.repeat(batch_size, 1, 1)
-                    pooled_embeds = content_pooled_embeds.repeat(batch_size, 1)
-                else:
-                    # Use style forward prompt
-                    encoder_hidden_states = style_prompt_embeds.repeat(batch_size, 1, 1)
-                    pooled_embeds = style_pooled_embeds.repeat(batch_size, 1)
 
                 # SDXL added conditions
                 add_time_ids = torch.cat([
                     torch.tensor([args.resolution, args.resolution]),
                     torch.tensor([0, 0]),
                     torch.tensor([args.resolution, args.resolution]),
-                ]).unsqueeze(0).repeat(batch_size, 1).to(accelerator.device, dtype=latents.dtype)
-
+                ]).unsqueeze(0).repeat(batch_size, 1).to(
+                    accelerator.device, dtype=latents.dtype
+                )
                 added_cond_kwargs = {
                     "text_embeds": pooled_embeds,
                     "time_ids": add_time_ids,
                 }
 
-                # Predict noise with motion
+                # UNet takes (B*F, 4, H//8, W//8) + (B,) timestep + (B, seq, dim) embeds
                 model_pred = unet(
                     noisy_latents,
-                    timesteps[:batch_size],
+                    timesteps,          # (B,) — UNet broadcasts over F frames
                     encoder_hidden_states=encoder_hidden_states,
                     added_cond_kwargs=added_cond_kwargs,
                     num_frames=num_frames,
                 ).sample
 
-                # Compute loss
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
                 elif noise_scheduler.config.prediction_type == "v_prediction":
-                    target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                    target = noise_scheduler.get_velocity(latents, noise, timesteps_expanded)
                 else:
-                    raise ValueError(f"Unknown prediction type")
+                    raise ValueError(f"Unknown prediction type: {noise_scheduler.config.prediction_type}")
 
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
-                # Backprop
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(trainable_params, args.max_grad_norm)
@@ -287,81 +263,72 @@ def main(args):
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
-            # Update progress
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
 
-                # Log
                 if global_step % args.log_every == 0:
-                    logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+                    logs = {
+                        "loss": loss.detach().item(),
+                        "lr": lr_scheduler.get_last_lr()[0],
+                    }
                     progress_bar.set_postfix(**logs)
                     accelerator.log(logs, step=global_step)
 
-                # Save checkpoint
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
                         unwrapped_unet = accelerator.unwrap_model(unet)
                         save_checkpoint(
-                            unwrapped_unet,
-                            args.output_dir,
-                            global_step,
-                            save_full_model=False,
+                            unwrapped_unet, args.output_dir,
+                            global_step, save_full_model=False,
                         )
 
-            if global_step >= args.max_train_steps:
-                break
-
+                if global_step >= args.max_train_steps:
+                    break
         if global_step >= args.max_train_steps:
             break
 
-    # Save final
+    # Save final checkpoint
     if accelerator.is_main_process:
         unwrapped_unet = accelerator.unwrap_model(unet)
-        save_checkpoint(
-            unwrapped_unet,
-            args.output_dir,
-            "final",
-            save_full_model=False,
-        )
+        save_checkpoint(unwrapped_unet, args.output_dir, "final", save_full_model=False)
         print(f"\nTraining complete! Saved to {args.output_dir}")
-
     accelerator.end_training()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    # Model
-    parser.add_argument("--pretrained_model_name_or_path", type=str, default="stabilityai/stable-diffusion-xl-base-1.0")
+    # Base model
+    parser.add_argument("--pretrained_model_name_or_path", type=str,
+                        default="stabilityai/stable-diffusion-xl-base-1.0")
     parser.add_argument("--motion_module_layers", type=int, default=2)
-    parser.add_argument("--train_motion_only", action="store_true")
+
+    # UnZipLoRA Stage-1 outputs (required for Stage-2)
+    parser.add_argument("--unziplora_content_path", type=str, required=True,
+                        help="Path to Stage-1 content LoRA dir (content/*.safetensors)")
+    parser.add_argument("--unziplora_style_path", type=str, required=True,
+                        help="Path to Stage-1 style LoRA dir (style/*.safetensors)")
+    parser.add_argument("--unziplora_content_weight_path", type=str, required=True,
+                        help="Path to mergercontent.pth")
+    parser.add_argument("--unziplora_style_weight_path", type=str, required=True,
+                        help="Path to mergerstyle.pth")
 
     # Data
     parser.add_argument("--instance_data_dir", type=str, required=True)
     parser.add_argument("--num_frames", type=int, default=16)
     parser.add_argument("--resolution", type=int, default=512)
 
-    # Training prompts
-    parser.add_argument("--instance_prompt", type=str, default="")
-    parser.add_argument("--content_forward_prompt", type=str, default="")
-    parser.add_argument("--style_forward_prompt", type=str, default="")
-
-    # Validation prompts
-    parser.add_argument("--validation_content", type=str, default="")
-    parser.add_argument("--validation_style", type=str, default="")
-    parser.add_argument("--validation_prompt", type=str, default="")
-    parser.add_argument("--validation_prompt_content", type=str, default="")
-    parser.add_argument("--validation_prompt_style", type=str, default="")
-    parser.add_argument("--validation_steps", type=int, default=500)
+    # Prompts — single instance prompt only (no random prompt switching)
+    parser.add_argument("--instance_prompt", type=str, required=True)
 
     # Training
     parser.add_argument("--output_dir", type=str, default="./outputs")
     parser.add_argument("--train_batch_size", type=int, default=1)
     parser.add_argument("--num_train_epochs", type=int, default=100)
-    parser.add_argument("--max_train_steps", type=int, default=10000)
+    parser.add_argument("--max_train_steps", type=int, default=2000)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
-    parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--lr_scheduler", type=str, default="constant")
     parser.add_argument("--lr_warmup_steps", type=int, default=0)
     parser.add_argument("--adam_beta1", type=float, default=0.9)
@@ -374,12 +341,11 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=str, default="0")
 
     # Logging
-    parser.add_argument("--name", type=str, default="animatediff")
+    parser.add_argument("--name", type=str, default="animatediff-stage2")
     parser.add_argument("--report_to", type=str, default="wandb")
     parser.add_argument("--log_every", type=int, default=10)
     parser.add_argument("--dataloader_num_workers", type=int, default=0)
 
     args = parser.parse_args()
-
     os.makedirs(args.output_dir, exist_ok=True)
     main(args)

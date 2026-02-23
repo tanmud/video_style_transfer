@@ -1,66 +1,51 @@
-export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
+#!/bin/bash
 
-# Motion Module Settings
+bash train_unziplora.sh
+
+export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 export MOTION_LAYERS=2
 
-# WandB Settings
+# WandB
 export WANDB_NAME="animatediff_male_biker"
 export WANDB_MODE="offline"
 
-# Video Data Settings
-export NUM_FRAMES=1  # Number of frames to sample per video
-export RESOLUTION=512  # Lower resolution for video (memory)
+# Data
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
-export OUTPUT_DIR="models/male_biker/male_biker"
+export OUTPUT_DIR="models/male_biker_video"
+export NUM_FRAMES=16        # ← was 1, must be 16
+export RESOLUTION=512
+
+# Stage-1 UnZipLoRA outputs (required for Stage-2)
+export UNZIPLORA_CONTENT="models/male_biker_image/content"
+export UNZIPLORA_STYLE="models/male_biker_image/style"
+export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/mergercontent.pth"
+export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/mergerstyle.pth"
+
+# Training
 export STEPS=2000
-
-# Training Settings
 export LEARNING_RATE=2e-5
-export TRAIN_MOTION_ONLY=true
-
-# Training prompts (male_biker specific)
 export PROMPT="A male biker in cartoon style biking on the street"
-export CONTENT_FORWARD_PROMPT="A male biker"
-export STYLE_FORWARD_PROMPT="A biker in cartoon style"
-
-# For validation (male_biker specific)
-export VALID_CONTENT="A male biker biking on a park"
-export VALID_PROMPT="A male biker in cartoon style biking on a park"
-export VALID_STYLE="A biker in cartoon style biking on a park"
-
-# for content validation (male_biker specific)
-export VALID_CONTENT_PROMPT="a video of a biker in park"
-
-# for style validation (male_biker specific)
-export VALID_STYLE_PROMPT="A biker in cartoon style"
-
-# Validation settings
-export VALIDATION_STEPS=10000  # How often to run validation
 
 accelerate launch train_animatediff.py \
-    --pretrained_model_name_or_path=$MODEL_NAME \
-    --name=$WANDB_NAME \
-    --instance_data_dir=$INSTANCE_DIR \
-    --output_dir=$OUTPUT_DIR \
-    --instance_prompt="${PROMPT}" \
-    --content_forward_prompt="${CONTENT_FORWARD_PROMPT}" \
-    --style_forward_prompt="${STYLE_FORWARD_PROMPT}" \
-    --motion_module_layers=$MOTION_LAYERS \
-    --resolution=$RESOLUTION \
-    --num_frames=$NUM_FRAMES \
-    --train_batch_size=1 \
-    --learning_rate="${LEARNING_RATE}" \
-    --report_to="wandb" \
-    --lr_scheduler="constant" \
-    --lr_warmup_steps=0 \
-    --max_train_steps="$STEPS" \
-    --checkpointing_steps=500 \
-    --mixed_precision="no" \
-    --seed="0" \
-    --validation_content="${VALID_CONTENT}" \
-    --validation_style="${VALID_STYLE}" \
-    --validation_prompt="${VALID_PROMPT}" \
-    --validation_prompt_style="${VALID_STYLE_PROMPT}" \
-    --validation_prompt_content="${VALID_CONTENT_PROMPT}" \
-    --validation_steps=$VALIDATION_STEPS \
-    $([ "$TRAIN_MOTION_ONLY" = "true" ] && echo "--train_motion_only")
+  --pretrained_model_name_or_path=$MODEL_NAME \
+  --name=$WANDB_NAME \
+  --instance_data_dir=$INSTANCE_DIR \
+  --output_dir=$OUTPUT_DIR \
+  --instance_prompt="${PROMPT}" \
+  --unziplora_content_path="${UNZIPLORA_CONTENT}" \
+  --unziplora_style_path="${UNZIPLORA_STYLE}" \
+  --unziplora_content_weight_path="${UNZIPLORA_CONTENT_WEIGHTS}" \
+  --unziplora_style_weight_path="${UNZIPLORA_STYLE_WEIGHTS}" \
+  --motion_module_layers=$MOTION_LAYERS \
+  --resolution=$RESOLUTION \
+  --num_frames=$NUM_FRAMES \
+  --train_batch_size=1 \
+  --gradient_accumulation_steps=4 \
+  --learning_rate="${LEARNING_RATE}" \
+  --report_to="wandb" \
+  --lr_scheduler="constant" \
+  --lr_warmup_steps=0 \
+  --max_train_steps=$STEPS \
+  --checkpointing_steps=500 \
+  --mixed_precision="no" \
+  --seed="0"
