@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bash train.sh
+#bash train.sh
 
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 export MOTION_LAYERS=2
