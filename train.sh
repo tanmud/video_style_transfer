@@ -60,7 +60,6 @@ accelerate launch train_unziplora.py \
   --checkpointing_steps=500 \
   --mixed_precision="no" \
   --seed="0" \
-  --use_8bit_adam \
   --validation_content="${VALID_CONTENT}" \
   --validation_style="${VALID_STYLE}" \
   --validation_prompt="${VALID_PROMPT}" \
