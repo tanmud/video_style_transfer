@@ -17,7 +17,7 @@ export WANDB_MODE="offline"
 # automatically (requires the DreamBoothDataset patch above).
 # Or pre-extract manually:
 #   ffmpeg -i male_biker.mp4 -vf fps=2 instance_data/male_biker/frame_%04d.jpg
-export INSTANCE_VIDEO="instance_data/male_biker/male_biker.mp4"
+export INSTANCE_VIDEO="instance_videos/male_biker/male_biker.mp4"
 export NUM_INSTANCE_FRAMES=1   # 1 = middle frame; use 3-5 for style variety
 
 # Output — Stage 2 will look for:
