@@ -16,10 +16,10 @@ export NUM_FRAMES=16        # ← was 1, must be 16
 export RESOLUTION=512
 
 # Stage-1 UnZipLoRA outputs (required for Stage-2)
-export UNZIPLORA_CONTENT="models/male_biker_image/content"
-export UNZIPLORA_STYLE="models/male_biker_image/style"
-export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/mergercontent.pth"
-export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/mergerstyle.pth"
+export UNZIPLORA_CONTENT="models/male_biker_image/male_biker_image_content"
+export UNZIPLORA_STYLE="models/male_biker_image/male_biker_image_style"
+export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/male_biker_image_merger_content.pth"
+export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_style.pth"
 
 # Training
 export STEPS=2000
