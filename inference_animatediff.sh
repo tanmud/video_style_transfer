@@ -4,7 +4,7 @@ export MOTION_LAYERS=2
 # Paths
 export STAGE2_DIR="models/male_biker_video"
 export SAVE_DIR="output/male_biker"
-export MOTION_MODULE_PATH="${STAGE2_DIR}/checkpoint-500" #change this later
+export MOTION_MODULE_PATH="${STAGE2_DIR}/checkpoint-500/motion_modules.pth" #change this later
 
 # Stage-1 UnZipLoRA outputs
 export UNZIPLORA_CONTENT="models/male_biker_image/male_biker_image_content"

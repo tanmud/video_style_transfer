@@ -52,7 +52,7 @@ def save_video_mp4(frames, output_path, fps):
                         codec="libx264", quality=8, pixelformat="yuv420p")
         return True
     except ImportError:
-        print("⚠️  imageio not found — install: pip install imageio-ffmpeg")
+        print("imageio not found — install: pip install imageio-ffmpeg")
         return False
 
 
