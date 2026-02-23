@@ -25,6 +25,7 @@ export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_
 export STEPS=2000
 export LEARNING_RATE=2e-5
 export PROMPT="A male biker in cartoon style biking on the street"
+export GRAD_ACC_STEPS=1
 
 accelerate launch train_animatediff.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
@@ -40,7 +41,7 @@ accelerate launch train_animatediff.py \
   --resolution=$RESOLUTION \
   --num_frames=$NUM_FRAMES \
   --train_batch_size=1 \
-  --gradient_accumulation_steps=4 \
+  --gradient_accumulation_steps=$GRAD_ACC_STEPS \
   --learning_rate="${LEARNING_RATE}" \
   --report_to="wandb" \
   --lr_scheduler="constant" \
