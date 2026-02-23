@@ -58,7 +58,7 @@ accelerate launch train_unziplora.py \
   --lr_warmup_steps=0 \
   --max_train_steps="${STEPS}" \
   --checkpointing_steps=500 \
-  --mixed_precision="fp16" \
+  --mixed_precision="no" \
   --seed="0" \
   --use_8bit_adam \
   --validation_content="${VALID_CONTENT}" \
