@@ -2461,7 +2461,7 @@ def main(args):
                 revision=args.revision,
                 torch_dtype=weight_dtype,
             )
-            pipeline.load_lora_weights(f"{args.output_dir}/content")
+            pipeline.load_lora_weights(f"{args.output_dir}_content")
             pipeline = pipeline.to(accelerator.device, dtype=weight_dtype)
             
             images, image_list = log_validation(
@@ -2479,7 +2479,7 @@ def main(args):
                 revision=args.revision,
                 torch_dtype=weight_dtype,
             )
-            pipeline.load_lora_weights(f"{args.output_dir}/style")
+            pipeline.load_lora_weights(f"{args.output_dir}_style")
             pipeline = pipeline.to(accelerator.device, dtype=weight_dtype)
             
             images, image_list = log_validation(
