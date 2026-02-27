@@ -69,6 +69,7 @@ accelerate launch train_unziplora.py \
   --validation_prompt="${VALID_PROMPT}" \
   --validation_prompt_style="${VALID_STYLE_PROMPT}" \
   --validation_prompt_content="${VALID_CONTENT_PROMPT}" \
+  --with_image_per_validation \
   --sample_times=$period_sample_epoch \
   --column_ratio=$sampled_column_ratio  \
   2>&1 | tee -a train_log.txt
