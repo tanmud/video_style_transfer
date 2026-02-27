@@ -253,8 +253,6 @@ class UnZipLoRALinearLayer(nn.Module):
             up_hidden_states_content = hidden_states_content.to(dtype) @ merged_content_weight
             added_hidden_states = up_hidden_states_content.to(orig_dtype)
         if self.forward_type == "style":
-            if hidden_states_style is None:
-                hidden_states_style = hidden_states_content
             orig_dtype = hidden_states_style.dtype
             merged_style_weight = self.lora_matrix_dic["style_down"].weight.T @ \
                                     self.lora_matrix_dic["style_up"].weight.T 
@@ -334,6 +332,8 @@ class UnZipLoRALinearLayerInfer(nn.Module):
                 up_hidden_states_content = hidden_states_content.to(dtype) @ masked_content_weight
             added_hidden_states = up_hidden_states_content.to(orig_dtype)
         if self.forward_type == "style":
+            if hidden_states_style is None:
+                hidden_states_style = hidden_states_content
             orig_dtype = hidden_states_style.dtype
             if self.masked_matrix["style"] is True: 
                 up_hidden_states_style = torch.zeros((hidden_states_style.shape[0], hidden_states_style.shape[1], self.out_features)).to(hidden_states_style.device)
