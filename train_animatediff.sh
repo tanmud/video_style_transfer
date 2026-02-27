@@ -40,6 +40,7 @@ accelerate launch train_animatediff.py \
   --motion_module_layers=$MOTION_LAYERS \
   --resolution=$RESOLUTION \
   --num_frames=$NUM_FRAMES \
+  --with_image_per_validation \
   --train_batch_size=1 \
   --gradient_accumulation_steps=$GRAD_ACC_STEPS \
   --learning_rate="${LEARNING_RATE}" \
