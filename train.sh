@@ -62,6 +62,8 @@ accelerate launch train_unziplora.py \
   --checkpointing_steps=500 \
   --mixed_precision="no" \
   --seed="0" \
+  --with_period_column_separation \
+  --with_one_shot \
   --validation_content="${VALID_CONTENT}" \
   --validation_style="${VALID_STYLE}" \
   --validation_prompt="${VALID_PROMPT}" \
@@ -69,3 +71,4 @@ accelerate launch train_unziplora.py \
   --validation_prompt_content="${VALID_CONTENT_PROMPT}" \
   --sample_times=$period_sample_epoch \
   --column_ratio=$sampled_column_ratio
+
