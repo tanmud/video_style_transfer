@@ -7,7 +7,7 @@ export RANK=64
 export CONTENT_LR=0.00005
 export STYLE_LR=0.00005
 export weight_lr=0.005
-export similarity_lambda=2.0
+export similarity_lambda=0.5
 export period_sample_epoch=3
 export sampled_column_ratio=0.1
 
@@ -64,10 +64,6 @@ accelerate launch train_unziplora.py \
   --checkpointing_steps=500 \
   --mixed_precision="no" \
   --seed="0" \
-  --with_period_column_separation \
-  --with_one_shot \
-  --with_no_overlap_first \
-  --with_accumulate_cone \
   --validation_content="${VALID_CONTENT}" \
   --validation_style="${VALID_STYLE}" \
   --validation_prompt="${VALID_PROMPT}" \
