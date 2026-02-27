@@ -1,6 +1,15 @@
 #!/bin/bash
 
-bash train.sh
+ONLY_MOTION=false
+for arg in "$@"; do
+  if [ "$arg" == "--only_motion" ]; then
+    ONLY_MOTION=true
+  fi
+done
+
+if [ "$ONLY_MOTION" = false ]; then
+  bash train.sh
+fi
 
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 export MOTION_LAYERS=2
