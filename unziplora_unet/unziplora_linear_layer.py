@@ -305,6 +305,7 @@ class UnZipLoRALinearLayerInfer(nn.Module):
                 # print(hidden_states.shape)
             if hidden_states_style is None: 
                 hidden_states_style = hidden_states_content
+            orig_dtype = hidden_states_style.dtype
             if self.masked_matrix["content"] is True:
                 up_hidden_states_content = torch.zeros((hidden_states_content.shape[0], hidden_states_content.shape[1], self.out_features)).to(hidden_states_content.device)
             else: 

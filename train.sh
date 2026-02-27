@@ -5,7 +5,7 @@ export RANK=64
 export CONTENT_LR=0.00005
 export STYLE_LR=0.00005
 export weight_lr=0.005
-export similarity_lambda=0.5
+export similarity_lambda=2.0
 export period_sample_epoch=3
 export sampled_column_ratio=0.1
 
