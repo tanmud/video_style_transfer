@@ -65,6 +65,12 @@ from unziplora_unet.pipeline_stable_diffusion_xl import StableDiffusionXLUnZipLo
 from unziplora_unet.unet_2d_condition import UNet2DConditionModel
 from unziplora_unet.utils import *
 
+tqdm.monitor_interval = 0
+
+import sys
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.24.0.dev0")
 

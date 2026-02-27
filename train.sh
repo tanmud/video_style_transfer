@@ -1,5 +1,7 @@
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
 
+export PYTHONUNBUFFERED=1 # flush output on log file
+
 # Hyperparameters
 export RANK=64
 export CONTENT_LR=0.00005
@@ -70,5 +72,5 @@ accelerate launch train_unziplora.py \
   --validation_prompt_style="${VALID_STYLE_PROMPT}" \
   --validation_prompt_content="${VALID_CONTENT_PROMPT}" \
   --sample_times=$period_sample_epoch \
-  --column_ratio=$sampled_column_ratio
-
+  --column_ratio=$sampled_column_ratio  \
+  2>&1 | tee -a train_log.txt
