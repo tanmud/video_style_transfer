@@ -253,6 +253,8 @@ class UnZipLoRALinearLayer(nn.Module):
             up_hidden_states_content = hidden_states_content.to(dtype) @ merged_content_weight
             added_hidden_states = up_hidden_states_content.to(orig_dtype)
         if self.forward_type == "style":
+            if hidden_states_style is None:
+                hidden_states_style = hidden_states_content
             orig_dtype = hidden_states_style.dtype
             merged_style_weight = self.lora_matrix_dic["style_down"].weight.T @ \
                                     self.lora_matrix_dic["style_up"].weight.T 
