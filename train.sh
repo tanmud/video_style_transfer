@@ -66,6 +66,8 @@ accelerate launch train_unziplora.py \
   --seed="0" \
   --with_period_column_separation \
   --with_one_shot \
+  --with_no_overlap_first \
+  --with_accumulate_cone \
   --validation_content="${VALID_CONTENT}" \
   --validation_style="${VALID_STYLE}" \
   --validation_prompt="${VALID_PROMPT}" \
