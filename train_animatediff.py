@@ -62,11 +62,13 @@ def main(args):
     if accelerator.is_main_process:
         print("Loading models...")
 
-    # VAE
+    dtype = torch.bfloat16 if args.mixed_precision == "bf16" else \
+        torch.float16  if args.mixed_precision == "fp16" else \
+        torch.float32
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="vae",
-        torch_dtype=torch.float16 if args.mixed_precision == "fp16" else torch.float32,
+        torch_dtype=dtype,
     )
     vae.requires_grad_(False)
     vae.to(accelerator.device)
@@ -94,10 +96,13 @@ def main(args):
     # ── Step 1: Load UNet with randomly-initialized temporal transformers ──────
     if accelerator.is_main_process:
         print("\nLoading UNet with motion modules...")
+    dtype = torch.bfloat16 if args.mixed_precision == "bf16" else \
+        torch.float16  if args.mixed_precision == "fp16" else \
+        torch.float32
     unet = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_module_kwargs={"num_layers": args.motion_module_layers},
-        torch_dtype=torch.float32,
+        torch_dtype=dtype,
         device=accelerator.device,
     )
 

@@ -13,7 +13,7 @@ from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.models.normalization import AdaLayerNormSingle
 from diffusers.models.transformer_2d import Transformer2DModel, Transformer2DModelOutput
 
-from unziplora_unet.attention import BasicTransformerBlock
+from unziplora_unet.unzip_attention import BasicTransformerBlock
 
 
 class Transformer2DModel(Transformer2DModel):

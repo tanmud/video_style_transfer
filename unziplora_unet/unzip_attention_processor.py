@@ -11,7 +11,7 @@ from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from diffusers.models.lora import LoRACompatibleLinear, LoRALinearLayer
 
-from unziplora_unet.lora import LoRACompatibleLinear
+from unziplora_unet.lora_unzip import LoRACompatibleLinear
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 

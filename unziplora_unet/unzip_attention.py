@@ -8,7 +8,7 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from diffusers.models.attention import BasicTransformerBlock, _chunked_feed_forward
 from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, RMSNorm
 
-from unziplora_unet.attention_processor import Attention
+from unziplora_unet.unzip_attention_processor import Attention
 
 @maybe_allow_in_graph
 class BasicTransformerBlock(BasicTransformerBlock):

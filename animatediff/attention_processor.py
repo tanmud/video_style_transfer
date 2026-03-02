@@ -64,14 +64,19 @@ class AttnProcessor:
         # Query projection
         query = attn.to_q(hidden_states, scale=scale)
 
-        # Key/Value projection (use content/style if provided)
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
+            encoder_hidden_states_content = hidden_states
+            encoder_hidden_states_style = hidden_states
         elif attn.norm_cross:
             encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
+            encoder_hidden_states_content = attn.norm_encoder_hidden_states(encoder_hidden_states_content)
+            encoder_hidden_states_style = attn.norm_encoder_hidden_states(encoder_hidden_states_style)
 
-        key = attn.to_k(encoder_hidden_states, scale=scale)
-        value = attn.to_v(encoder_hidden_states, scale=scale)
+        key   = attn.to_k(encoder_hidden_states, 
+                        hidden_states_style=encoder_hidden_states_style, scale=scale)
+        value = attn.to_v(encoder_hidden_states, 
+                        hidden_states_style=encoder_hidden_states_style, scale=scale)
 
         # Reshape for multi-head attention
         query = attn.head_to_batch_dim(query)
