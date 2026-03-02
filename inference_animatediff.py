@@ -164,7 +164,8 @@ def generate_video(
     frames = []
     for i in range(args.num_frames):
         with torch.no_grad():
-            frame = vae.decode(latents_dec[i:i+1].to(torch.float32)).sample
+            frame = vae.decode(latents_dec[i:i+1].to(vae.dtype)).sample
+        frame = frame.to(torch.float32)
         frame = (frame / 2 + 0.5).clamp(0, 1)
         frame = frame.cpu().permute(0, 2, 3, 1).numpy()[0]
         frames.append(Image.fromarray((frame * 255).astype(np.uint8)))
