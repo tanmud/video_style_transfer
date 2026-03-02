@@ -1,5 +1,6 @@
 import argparse
 import os
+from contextlib import nullcontext
 import torch
 import numpy as np
 from PIL import Image
@@ -113,43 +114,47 @@ def generate_video(
         t_batch = torch.tensor([t], device=device)
 
         with torch.no_grad():
-            if args.guidance_scale > 1.0:
-                # Two separate passes — avoids shape ambiguity with batched CFG
-                noise_pred_uncond = unet(
-                    scaled,
-                    t_batch,
-                    encoder_hidden_states=uncond_embeds,    # (1, seq, dim)
-                    added_cond_kwargs={
-                        "text_embeds": uncond_pooled,       # (1, 1280)
-                        "time_ids": add_time_ids,           # (1, 6)
-                    },
-                    num_frames=args.num_frames,
-                ).sample
-                noise_pred_text = unet(
-                    scaled,
-                    t_batch,
-                    encoder_hidden_states=cond_embeds,
-                    added_cond_kwargs={
-                        "text_embeds": cond_pooled,
-                        "time_ids": add_time_ids,
-                    },
-                    num_frames=args.num_frames,
-                ).sample
-                noise_pred = (
-                    noise_pred_uncond
-                    + args.guidance_scale * (noise_pred_text - noise_pred_uncond)
-                )
-            else:
-                noise_pred = unet(
-                    scaled,
-                    t_batch,
-                    encoder_hidden_states=cond_embeds,
-                    added_cond_kwargs={
-                        "text_embeds": cond_pooled,
-                        "time_ids": add_time_ids,
-                    },
-                    num_frames=args.num_frames,
-                ).sample
+            autocast_dtype = torch.bfloat16 if args.mixed_precision == "bf16" else \
+                             torch.float16  if args.mixed_precision == "fp16" else None
+            ctx = torch.autocast("cuda", dtype=autocast_dtype) if autocast_dtype else nullcontext()
+            with ctx:
+                if args.guidance_scale > 1.0:
+                    # Two separate passes — avoids shape ambiguity with batched CFG
+                    noise_pred_uncond = unet(
+                        scaled,
+                        t_batch,
+                        encoder_hidden_states=uncond_embeds,    # (1, seq, dim)
+                        added_cond_kwargs={
+                            "text_embeds": uncond_pooled,       # (1, 1280)
+                            "time_ids": add_time_ids,           # (1, 6)
+                        },
+                        num_frames=args.num_frames,
+                    ).sample
+                    noise_pred_text = unet(
+                        scaled,
+                        t_batch,
+                        encoder_hidden_states=cond_embeds,
+                        added_cond_kwargs={
+                            "text_embeds": cond_pooled,
+                            "time_ids": add_time_ids,
+                        },
+                        num_frames=args.num_frames,
+                    ).sample
+                    noise_pred = (
+                        noise_pred_uncond
+                        + args.guidance_scale * (noise_pred_text - noise_pred_uncond)
+                    )
+                else:
+                    noise_pred = unet(
+                        scaled,
+                        t_batch,
+                        encoder_hidden_states=cond_embeds,
+                        added_cond_kwargs={
+                            "text_embeds": cond_pooled,
+                            "time_ids": add_time_ids,
+                        },
+                        num_frames=args.num_frames,
+                    ).sample
 
         latents = scheduler.step(noise_pred, t, latents).prev_sample
 
@@ -314,6 +319,7 @@ if __name__ == "__main__":
     parser.add_argument("--guidance_scale", type=float, default=7.5)
 
     # Output
+
     parser.add_argument("--save_dir", type=str, default="output/")
 
     args = parser.parse_args()
