@@ -86,17 +86,22 @@ def generate_video(
             text_encoder, text_encoder_2, tokenizer, tokenizer_2, "", device
         )
 
+        cond_embeds=cond_embeds.to(dtype=unet.dtype)
+        cond_pooled=cond_pooled.to(dtype=unet.dtype)
+        uncond_embeds=uncond_embeds.to(dtype=unet.dtype)
+        uncond_pooled=uncond_pooled.to(dtype=unet.dtype)
+
     # SDXL time embeddings — (B=1, 6)
     add_time_ids = torch.cat([
         torch.tensor([args.height, args.width]),
         torch.tensor([0, 0]),
         torch.tensor([args.height, args.width]),
-    ]).unsqueeze(0).to(device, dtype=torch.float32)
+    ]).unsqueeze(0).to(device, dtype=unet.dtype)
 
     # Initial latents: (B*F, 4, H//8, W//8) with B=1
     latents = torch.randn(
         (args.num_frames, 4, args.height // 8, args.width // 8),
-        device=device, dtype=torch.float32,
+        device=device, dtype=unet.dtype,
     )
     latents = latents * scheduler.init_noise_sigma
 
