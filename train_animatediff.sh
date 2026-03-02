@@ -38,7 +38,7 @@ export PROMPT="A male biker in cartoon style biking on the street"
 export GRAD_ACC_STEPS=4
 export MIXED_PRECISION="bf16"
 
-accelerate launch train_animatediff.py \
+accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --name=$WANDB_NAME \
   --instance_data_dir=$INSTANCE_DIR \
