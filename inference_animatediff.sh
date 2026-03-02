@@ -19,6 +19,7 @@ export GUIDANCE_SCALE=7.5
 export HEIGHT=512
 export WIDTH=512
 export FPS=8
+export MIXED_PRECISION="bf16"
 
 # Three generation modes:
 # type=both  -> full subject (instance prompt)
@@ -45,4 +46,5 @@ python inference_animatediff.py \
   --guidance_scale=$GUIDANCE_SCALE \
   --height=$HEIGHT \
   --width=$WIDTH \
-  --fps=$FPS
+  --fps=$FPS \
+  --mixed_precision=$MIXED_PRECISION

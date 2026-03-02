@@ -96,9 +96,6 @@ def main(args):
     # ── Step 1: Load UNet with randomly-initialized temporal transformers ──────
     if accelerator.is_main_process:
         print("\nLoading UNet with motion modules...")
-    dtype = torch.bfloat16 if args.mixed_precision == "bf16" else \
-        torch.float16  if args.mixed_precision == "fp16" else \
-        torch.float32
     unet = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_module_kwargs={"num_layers": args.motion_module_layers},

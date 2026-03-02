@@ -175,11 +175,13 @@ def main(args):
     print("AnimateDiff + UnZipLoRA Inference")
     print("=" * 70)
 
-    # 1. VAE
     print("Loading VAE...")
+    dtype = torch.bfloat16 if args.mixed_precision == "bf16" else \
+        torch.float16  if args.mixed_precision == "fp16" else \
+        torch.float32
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae",
-        torch_dtype=torch.float32,
+        torch_dtype=dtype,
     )
     vae.requires_grad_(False).to(device)
 
@@ -208,7 +210,7 @@ def main(args):
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_module_path=args.motion_module_path,
         motion_module_kwargs={"num_layers": args.motion_module_layers},
-        torch_dtype=torch.float32,
+        torch_dtype=dtype,
         device=device,
     )
 
@@ -300,6 +302,7 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--fps", type=int, default=8)
+    parser.add_argument("--mixed_precision", type=str, default="no")
 
     # Generation settings
     parser.add_argument("--num_inference_steps", type=int, default=50)
