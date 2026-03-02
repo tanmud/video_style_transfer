@@ -36,6 +36,7 @@ export STEPS=2000
 export LEARNING_RATE=2e-5
 export PROMPT="A male biker in cartoon style biking on the street"
 export GRAD_ACC_STEPS=4
+export MIXED_PRECISION="bf16"
 
 accelerate launch train_animatediff.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
@@ -58,5 +59,5 @@ accelerate launch train_animatediff.py \
   --lr_warmup_steps=0 \
   --max_train_steps=$STEPS \
   --checkpointing_steps=500 \
-  --mixed_precision="no" \
+  --mixed_precision=$MIXED_PRECISION \
   --seed="0"
