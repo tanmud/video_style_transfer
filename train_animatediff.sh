@@ -35,7 +35,7 @@ export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_
 export STEPS=2000
 export LEARNING_RATE=2e-5
 export PROMPT="A male biker in cartoon style biking on the street"
-export GRAD_ACC_STEPS=4
+export GRAD_ACC_STEPS=1
 export MIXED_PRECISION="bf16"
 
 accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
