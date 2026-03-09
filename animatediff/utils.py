@@ -3,7 +3,7 @@ import torch
 from typing import List, Optional
 
 from diffusers import MotionAdapter, UNet2DConditionModel
-from diffusers.models.unet_motion_model import UNetMotionModel
+from diffusers import UNetMotionModel
 from diffusers.utils import logging
 
 logger = logging.get_logger(__name__)
