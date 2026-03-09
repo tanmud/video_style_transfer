@@ -5,8 +5,8 @@ from typing import List, Optional
 from diffusers import MotionAdapter
 from diffusers.models.unet_motion_model import UNetMotionModel
 from diffusers.utils import logging
+from diffusers import UNet2DConditionModel
 
-from unziplora_unet.unet_2d_condition import UNet2DConditionModel
 
 logger = logging.get_logger(__name__)
 
