@@ -5,7 +5,6 @@ import copy
 
 import torch
 from safetensors import safe_open
-from diffusers.loaders.lora import LORA_WEIGHT_NAME_SAFE
 import itertools
 
 from unziplora_unet.unziplora_linear_layer import UnZipLoRALinearLayer, UnZipLoRALinearLayerInfer
@@ -22,6 +21,8 @@ from transformers import (
     CLIPTextModelWithProjection,
     )
 from record_utils.cone import cone_matrix, cone_column_sparsity, draw_concatenated_heatmap
+
+LORA_WEIGHT_NAME_SAFE = "pytorch_lora_weights.safetensors"
 
 universal_nevigate = [
 "watermark", "lowres", "low quality",
