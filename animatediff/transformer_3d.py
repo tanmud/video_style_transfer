@@ -6,10 +6,10 @@ from torch import nn
 from diffusers.utils import USE_PEFT_BACKEND, is_torch_version
 from diffusers.models.transformer_2d import Transformer2DModel as DiffusersTransformer2DModel
 from diffusers.models.transformer_2d import Transformer2DModelOutput
-from animatediff.attention import BasicTransformerBlock
+from unziplora_unet.unzip_attention import BasicTransformerBlock
 
 
-class Transformer2DModel(DiffusersTransformer2DModel):
+class Transformer3DModel(DiffusersTransformer2DModel):
     """
     Transformer2DModel with UnzipLoRA attention and video support (num_frames).
     """

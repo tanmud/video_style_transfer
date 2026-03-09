@@ -8,7 +8,7 @@ from diffusers.models.unet_2d_blocks import (
     CrossAttnUpBlock2D as DiffusersCrossAttnUpBlock2D,
     UNetMidBlock2DCrossAttn as DiffusersUNetMidBlock2DCrossAttn,
 )
-from animatediff.transformer_2d import Transformer2DModel
+from animatediff.transformer_3d import Transformer3DModel
 
 
 class UNetMidBlock2DCrossAttn(DiffusersUNetMidBlock2DCrossAttn):
@@ -56,14 +56,14 @@ class UNetMidBlock2DCrossAttn(DiffusersUNetMidBlock2DCrossAttn):
             attention_type=attention_type,
         )
 
-        # Replace attentions with our custom Transformer2DModel
+        # Replace attentions with our custom Transformer3DModel
         if isinstance(transformer_layers_per_block, int):
             transformer_layers_per_block = [transformer_layers_per_block] * num_layers
 
         attentions = []
         for i in range(num_layers):
             attentions.append(
-                Transformer2DModel(
+                Transformer3DModel(
                     num_attention_heads,
                     in_channels // num_attention_heads,
                     in_channels=in_channels,
@@ -196,14 +196,14 @@ class CrossAttnDownBlock2D(DiffusersCrossAttnDownBlock2D):
             attention_type=attention_type,
         )
 
-        # Replace attentions with our custom Transformer2DModel
+        # Replace attentions with our custom Transformer3DModel
         if isinstance(transformer_layers_per_block, int):
             transformer_layers_per_block = [transformer_layers_per_block] * num_layers
 
         attentions = []
         for i in range(num_layers):
             attentions.append(
-                Transformer2DModel(
+                Transformer3DModel(
                     num_attention_heads,
                     out_channels // num_attention_heads,
                     in_channels=out_channels,
@@ -352,14 +352,14 @@ class CrossAttnUpBlock2D(DiffusersCrossAttnUpBlock2D):
             attention_type=attention_type,
         )
 
-        # Replace attentions with our custom Transformer2DModel
+        # Replace attentions with our custom Transformer3DModel
         if isinstance(transformer_layers_per_block, int):
             transformer_layers_per_block = [transformer_layers_per_block] * num_layers
 
         attentions = []
         for i in range(num_layers):
             attentions.append(
-                Transformer2DModel(
+                Transformer3DModel(
                     num_attention_heads,
                     out_channels // num_attention_heads,
                     in_channels=out_channels,
