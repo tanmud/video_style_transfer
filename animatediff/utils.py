@@ -39,7 +39,7 @@ def load_unet_with_motion(
         # Form 3 — local checkpoint dir with motion_modules.pth
         logger.info(f"Detected local motion checkpoint: {pth_file}")
         logger.info("Initialising UNetMotionModel with default motion modules...")
-        unet = UNetMotionModel.from_unet(base_unet)  # default (random) motion weights
+        unet = UNetMotionModel.from_unet2d(base_unet)  # default (random) motion weights
 
         logger.info("Loading saved motion weights via load_state_dict...")
         state_dict = torch.load(pth_file, map_location="cpu")
@@ -57,7 +57,7 @@ def load_unet_with_motion(
         motion_adapter = MotionAdapter.from_pretrained(
             motion_adapter_path, torch_dtype=torch_dtype
         )
-        unet = UNetMotionModel.from_unet(base_unet, motion_adapter)
+        unet = UNetMotionModel.from_unet2d(base_unet, motion_adapter)
         logger.info("UNetMotionModel assembled from base UNet + MotionAdapter")
 
     unet.to(device)
@@ -166,7 +166,7 @@ def load_unet_with_motion(
         # Form 3 — local checkpoint dir with motion_modules.pth
         logger.info(f"Detected local motion checkpoint: {pth_file}")
         logger.info("Initialising UNetMotionModel with default motion modules...")
-        unet = UNetMotionModel.from_unet(base_unet)  # default (random) motion weights
+        unet = UNetMotionModel.from_unet2d(base_unet)  # default (random) motion weights
 
         logger.info("Loading saved motion weights via load_state_dict...")
         state_dict = torch.load(pth_file, map_location="cpu")
@@ -184,7 +184,7 @@ def load_unet_with_motion(
         motion_adapter = MotionAdapter.from_pretrained(
             motion_adapter_path, torch_dtype=torch_dtype
         )
-        unet = UNetMotionModel.from_unet(base_unet, motion_adapter)
+        unet = UNetMotionModel.from_unet2d(base_unet, motion_adapter)
         logger.info("UNetMotionModel assembled from base UNet + MotionAdapter")
 
     unet.to(device)
