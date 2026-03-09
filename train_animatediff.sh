@@ -2,7 +2,7 @@
 
 ONLY_MOTION=false
 for arg in "$@"; do
-  if [ "$arg" == "--only_motion" ]; then
+  if [ "$arg" == "--only-motion" ]; then
     ONLY_MOTION=true
     echo "WARNING: Only training motion (expecting already trained spatial)"
   fi
