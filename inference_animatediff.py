@@ -219,8 +219,7 @@ def main(args):
     print("Loading UNet with trained motion modules...")
     unet = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-        motion_module_path=args.motion_module_path,
-        motion_module_kwargs={"num_layers": args.motion_module_layers},
+        motion_adapter_path=args.motion_adapter_path,
         torch_dtype=dtype,
         device=device,
     )
@@ -290,16 +289,14 @@ if __name__ == "__main__":
 
     # Base model
     parser.add_argument("--pretrained_model_name_or_path", type=str, required=True)
-    parser.add_argument("--motion_module_path", type=str, required=True,
-                        help="Dir containing motion_modules.pth from Stage-2 training")
-    parser.add_argument("--motion_module_layers", type=int, default=2)
 
     # UnZipLoRA paths (Stage-1 outputs)
     parser.add_argument("--unziplora_content_path", type=str, required=True)
     parser.add_argument("--unziplora_style_path", type=str, required=True)
     parser.add_argument("--unziplora_content_weight_path", type=str, required=True)
     parser.add_argument("--unziplora_style_weight_path", type=str, required=True)
-
+    parser.add_argument("--motion_adapter_path", type=str, required=True,
+                        help="Dir saved by save_checkpoint containing motion_modules.pth, OR a HF hub adapter")
     # Generation prompts — pass whichever modes you want
     parser.add_argument("--instance_prompt", type=str, default=None,
                         help="type=both  — full subject reconstruction")

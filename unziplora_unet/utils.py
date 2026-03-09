@@ -401,6 +401,9 @@ def insert_unziplora_to_unet(
         weight_style_state_dict = torch.load(weight_style_path)
     # weight_state_dict = {key: value.to(device) for key, value in weight_state_dict.items()}
     for attn_processor_name, attn_processor in unet.attn_processors.items():
+        if "motion_modules" in attn_processor_name:
+            print("FOUND: motion module in unziplora")
+            continue
         # Parse the attention module.
         attn_module = unet
         for n in attn_processor_name.split(".")[:-1]:

@@ -13,7 +13,7 @@ if [ "$ONLY_MOTION" = false ]; then
 fi
 
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
-export MOTION_LAYERS=2
+export MOTION_ADAPTER="guoyww/animatediff-motion-adapter-sdxl-beta"
 
 # WandB
 export WANDB_NAME="animatediff_male_biker"
@@ -48,7 +48,7 @@ accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --unziplora_style_path="${UNZIPLORA_STYLE}" \
   --unziplora_content_weight_path="${UNZIPLORA_CONTENT_WEIGHTS}" \
   --unziplora_style_weight_path="${UNZIPLORA_STYLE_WEIGHTS}" \
-  --motion_module_layers=$MOTION_LAYERS \
+  --motion_adapter_path=$MOTION_ADAPTER \
   --resolution=$RESOLUTION \
   --num_frames=$NUM_FRAMES \
   --train_batch_size=1 \

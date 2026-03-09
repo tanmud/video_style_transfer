@@ -98,8 +98,8 @@ def main(args):
         print("\nLoading UNet with motion modules...")
     unet = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-        motion_module_kwargs={"num_layers": args.motion_module_layers},
-        torch_dtype=dtype,
+        motion_adapter_path=args.motion_adapter_path,
+        torch_dtype=torch.float32,
         device=accelerator.device,
     )
 
@@ -304,7 +304,6 @@ if __name__ == "__main__":
     # Base model
     parser.add_argument("--pretrained_model_name_or_path", type=str,
                         default="stabilityai/stable-diffusion-xl-base-1.0")
-    parser.add_argument("--motion_module_layers", type=int, default=2)
 
     # UnZipLoRA Stage-1 outputs (required for Stage-2)
     parser.add_argument("--unziplora_content_path", type=str, required=True,
@@ -315,6 +314,8 @@ if __name__ == "__main__":
                         help="Path to mergercontent.pth")
     parser.add_argument("--unziplora_style_weight_path", type=str, required=True,
                         help="Path to mergerstyle.pth")
+    parser.add_argument("--motion_adapter_path", type=str, required=True,
+                        help="Path to pretrained MotionAdapter (e.g. guoyww/animatediff-motion-adapter-sdxl-beta)")
 
     # Data
     parser.add_argument("--instance_data_dir", type=str, required=True)

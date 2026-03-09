@@ -1,10 +1,9 @@
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
-export MOTION_LAYERS=2
+export MOTION_ADAPTER_PATH="${STAGE2_DIR}/checkpoint-final"
 
 # Paths
 export STAGE2_DIR="models/male_biker_video"
 export SAVE_DIR="output/male_biker"
-export MOTION_MODULE_PATH="${STAGE2_DIR}/checkpoint-final/motion_modules.pth" #change this later
 
 # Stage-1 UnZipLoRA outputs
 export UNZIPLORA_CONTENT="models/male_biker_image/male_biker_image_content"
@@ -31,12 +30,11 @@ export STYLE_PROMPT="A dog running in cartoon style"
 
 python inference_animatediff.py \
   --pretrained_model_name_or_path="$MODEL_NAME" \
-  --motion_module_path="$MOTION_MODULE_PATH" \
-  --motion_module_layers=$MOTION_LAYERS \
   --unziplora_content_path="${UNZIPLORA_CONTENT}" \
   --unziplora_style_path="${UNZIPLORA_STYLE}" \
   --unziplora_content_weight_path="${UNZIPLORA_CONTENT_WEIGHTS}" \
   --unziplora_style_weight_path="${UNZIPLORA_STYLE_WEIGHTS}" \
+  --motion_adapter_path="$MOTION_ADAPTER_PATH" \
   --instance_prompt="${INSTANCE_PROMPT}" \
   --content_prompt="${CONTENT_PROMPT}" \
   --style_prompt="${STYLE_PROMPT}" \
