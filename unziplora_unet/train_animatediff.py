@@ -197,8 +197,8 @@ def main(args):
                 batch_size = frames.shape[0]
                 num_frames = frames.shape[1]
 
-                # ── VAE encode: flatten frames into batch dim ─────────────
-                # VAE is 2D-only: (B, F, C, H, W) → (B*F, C, H, W)
+                # ── VAE encode ────────────────────────────────────────────
+                # VAE is 2D-only: flatten (B, F, C, H, W) → (B*F, C, H, W)
                 frames_flat = frames.reshape(-1, *frames.shape[2:]).to(dtype=vae.dtype)
                 with torch.no_grad():
                     latents_flat = vae.encode(frames_flat).latent_dist.sample()
@@ -208,7 +208,7 @@ def main(args):
                 # ── Noise ─────────────────────────────────────────────────
                 noise_flat = torch.randn_like(latents_flat)  # (B*F, 4, H//8, W//8)
 
-                # One timestep per clip, expanded to match flat frame count
+                # One timestep per clip; expand to (B*F,) for add_noise
                 timesteps = torch.randint(
                     0, noise_scheduler.config.num_train_timesteps,
                     (batch_size,), device=latents_flat.device,
@@ -218,9 +218,12 @@ def main(args):
                     latents_flat, noise_flat, timesteps_expanded
                 )  # (B*F, 4, H//8, W//8)
 
-                # ── Prepare UNet input: (B, C, F, H, W) ──────────────────
-                # UNetMotionModel.forward expects (B, C, F, H, W) and handles
-                # the B*F flattening + frame-repetition of conditioning internally.
+                # ── Prepare UNet input ────────────────────────────────────
+                # NOTE: UNetMotionModel docstring says (B, F, C, H, W) but
+                # source reads num_frames = sample.shape[2], so actual
+                # expected input is (B, C, F, H, W). The UNet handles
+                # repeat_interleave of timesteps and encoder_hidden_states
+                # internally using num_frames from sample.shape[2].
                 noisy_latents_5d = (
                     noisy_latents_flat
                     .reshape(batch_size, num_frames, *noisy_latents_flat.shape[1:])  # (B, F, C, H, W)
@@ -228,42 +231,47 @@ def main(args):
                     .contiguous()
                 )
 
-                # ── Text conditioning: keep at (B, ...) ──────────────────
-                # IMPORTANT: do NOT pre-expand to (B*F, ...).
-                # UNetMotionModel.forward calls repeat_interleave(num_frames)
-                # on encoder_hidden_states and added_cond_kwargs internally.
-                # Pre-expanding here would cause double-expansion:
-                #   emb(B) + aug_emb(B*F) → broadcast (B*F) → repeat → (B*F², ...)
-                # which is what caused the "tensor a (16) vs tensor b (256)" crash.
+                # ── Text conditioning — (B, ...) only, UNet repeats internally
                 use_uncond = torch.rand(1).item() < 0.1
                 if use_uncond:
-                    encoder_hidden_states = uncond_prompt_embeds.repeat(batch_size, 1, 1)  # (B, seq, dim)
-                    pooled_embeds = uncond_pooled_embeds.repeat(batch_size, 1)             # (B, 1280)
+                    encoder_hidden_states = uncond_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = uncond_pooled_embeds.repeat(batch_size, 1)
                 else:
-                    encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)  # (B, seq, dim)
-                    pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)             # (B, 1280)
+                    encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)
+                # encoder_hidden_states: (B, seq, dim)
+                # pooled_embeds: (B, 1280)
 
-                # SDXL added conditions: keep at (B, 6), not (B*F, 6)
+                # SDXL added conditions: (B, 6)
                 add_time_ids = torch.cat([
                     torch.tensor([args.resolution, args.resolution]),
                     torch.tensor([0, 0]),
                     torch.tensor([args.resolution, args.resolution]),
                 ]).unsqueeze(0).repeat(batch_size, 1).to(
                     accelerator.device, dtype=latents_flat.dtype
-                )  # (B, 6)
+                )
+                added_cond_kwargs = {
+                    "text_embeds": pooled_embeds,  # (B, 1280)
+                    "time_ids": add_time_ids,       # (B, 6)
+                }
 
                 # ── UNet forward ──────────────────────────────────────────
-                # Input:  noisy_latents_5d  (B, C, F, H, W)
-                # Output: sample           (B, C, F, H, W)
+                # Input:  (B, C, F, H, W) — UNet repeats emb/encoder_hidden_states by num_frames internally
+                # Output: (B, C, F, H, W)
                 model_pred = unet(
-                    noisy_latents_5d,                            # (B, C, F, H, W)
-                    timesteps,                                   # (B,)
-                    encoder_hidden_states=encoder_hidden_states, # (B, seq, dim)
-                    added_cond_kwargs={
-                        "text_embeds": pooled_embeds,            # (B, 1280)
-                        "time_ids": add_time_ids,                # (B, 6)
-                    },
+                    noisy_latents_5d,                                # (B, C, F, H, W)
+                    timesteps,                                       # (B,)
+                    encoder_hidden_states=encoder_hidden_states,     # (B, seq, dim)
+                    added_cond_kwargs=added_cond_kwargs,
                 ).sample  # (B, C, F, H, W)
+
+                # Flatten output: (B, C, F, H, W) → (B*F, C, H, W) for loss
+                model_pred_flat = (
+                    model_pred
+                    .permute(0, 2, 1, 3, 4)                                          # (B, F, C, H, W)
+                    .contiguous()
+                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
+                )
 
                 # ── Loss ──────────────────────────────────────────────────
                 if noise_scheduler.config.prediction_type == "epsilon":
@@ -277,13 +285,6 @@ def main(args):
                         f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
                     )
 
-                # Flatten output back to (B*F, C, H, W) for loss against noise_flat
-                model_pred_flat = (
-                    model_pred
-                    .permute(0, 2, 1, 3, 4)                                          # (B, F, C, H, W)
-                    .contiguous()
-                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
-                )
                 loss = F.mse_loss(model_pred_flat.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
