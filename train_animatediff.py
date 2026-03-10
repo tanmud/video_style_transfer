@@ -197,8 +197,8 @@ def main(args):
                 batch_size = frames.shape[0]
                 num_frames = frames.shape[1]
 
-                # ── VAE encode: flatten frames into batch dim ─────────────
-                # VAE is 2D-only: (B, F, C, H, W) → (B*F, C, H, W)
+                # ── VAE encode ────────────────────────────────────────────
+                # VAE is 2D-only: flatten (B, F, C, H, W) → (B*F, C, H, W)
                 frames_flat = frames.reshape(-1, *frames.shape[2:]).to(dtype=vae.dtype)
                 with torch.no_grad():
                     latents_flat = vae.encode(frames_flat).latent_dist.sample()
@@ -208,7 +208,7 @@ def main(args):
                 # ── Noise ─────────────────────────────────────────────────
                 noise_flat = torch.randn_like(latents_flat)  # (B*F, 4, H//8, W//8)
 
-                # One timestep per clip, expanded to match flat frame count
+                # One timestep per clip; expand to (B*F,) for add_noise
                 timesteps = torch.randint(
                     0, noise_scheduler.config.num_train_timesteps,
                     (batch_size,), device=latents_flat.device,
@@ -219,50 +219,11 @@ def main(args):
                 )  # (B*F, 4, H//8, W//8)
 
                 # ── Prepare UNet input ────────────────────────────────────
-                # UNetMotionModel.forward() takes (B*F, C, H, W) with the
-                # frames interleaved in the CHANNEL-FIRST order after
-                # permute: (B,F,C,H,W) → permute(0,2,1,3,4) → (B,C,F,H,W)
-                # → reshape → (B*F, C, H, W)
-                noisy_latents_unet = (
-                    noisy_latents_flat
-                    .reshape(batch_size, num_frames, *noisy_latents_flat.shape[1:])  # (B, F, C, H, W)
-                    .permute(0, 2, 1, 3, 4)                                          # (B, C, F, H, W)
-                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
-                    .contiguous()
-                )
-
-                # ── Text conditioning ─────────────────────────────────────
-                # All conditioning must be (B*F, ...) to match the flat input
-                use_uncond = torch.rand(1).item() < 0.1
-                if use_uncond:
-                    encoder_hidden_states = uncond_prompt_embeds.repeat(batch_size, 1, 1)
-                    pooled_embeds = uncond_pooled_embeds.repeat(batch_size, 1)
-                else:
-                    encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)
-                    pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)
-                # repeat_interleave to match (B*F, seq, dim)
-                encoder_hidden_states = encoder_hidden_states.repeat_interleave(num_frames, dim=0)
-                pooled_embeds = pooled_embeds.repeat_interleave(num_frames, dim=0)
-
-                # SDXL added conditions: (B*F, 6)
-                add_time_ids = torch.cat([
-                    torch.tensor([args.resolution, args.resolution]),
-                    torch.tensor([0, 0]),
-                    torch.tensor([args.resolution, args.resolution]),
-                ]).unsqueeze(0).repeat(batch_size, 1).to(
-                    accelerator.device, dtype=latents_flat.dtype
-                )
-                add_time_ids = add_time_ids.repeat_interleave(num_frames, dim=0)  # (B*F, 6)
-
-                added_cond_kwargs = {
-                    "text_embeds": pooled_embeds,   # (B*F, 1280)
-                    "time_ids": add_time_ids,        # (B*F, 6)
-                }
-
-                # ── UNet forward ──────────────────────────────────────────
-                # Input:  (B*F, 4, H//8, W//8)
-                # Output: (B*F, 4, H//8, W//8)
-                # (B*F, C, H, W) → (B, F, C, H, W)
+                # NOTE: UNetMotionModel docstring says (B, F, C, H, W) but
+                # source reads num_frames = sample.shape[2], so actual
+                # expected input is (B, C, F, H, W). The UNet handles
+                # repeat_interleave of timesteps and encoder_hidden_states
+                # internally using num_frames from sample.shape[2].
                 noisy_latents_5d = (
                     noisy_latents_flat
                     .reshape(batch_size, num_frames, *noisy_latents_flat.shape[1:])  # (B, F, C, H, W)
@@ -270,15 +231,47 @@ def main(args):
                     .contiguous()
                 )
 
+                # ── Text conditioning — (B, ...) only, UNet repeats internally
+                use_uncond = torch.rand(1).item() < 0.1
+                if use_uncond:
+                    encoder_hidden_states = uncond_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = uncond_pooled_embeds.repeat(batch_size, 1)
+                else:
+                    encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)
+                    pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)
+                # encoder_hidden_states: (B, seq, dim)
+                # pooled_embeds: (B, 1280)
+
+                # SDXL added conditions: (B, 6)
+                add_time_ids = torch.cat([
+                    torch.tensor([args.resolution, args.resolution]),
+                    torch.tensor([0, 0]),
+                    torch.tensor([args.resolution, args.resolution]),
+                ]).unsqueeze(0).repeat(batch_size, 1).to(
+                    accelerator.device, dtype=latents_flat.dtype
+                )
+                added_cond_kwargs = {
+                    "text_embeds": pooled_embeds,  # (B, 1280)
+                    "time_ids": add_time_ids,       # (B, 6)
+                }
+
+                # ── UNet forward ──────────────────────────────────────────
+                # Input:  (B, C, F, H, W) — UNet repeats emb/encoder_hidden_states by num_frames internally
+                # Output: (B, C, F, H, W)
                 model_pred = unet(
-                    noisy_latents_5d,                            # (B, C, F, H, W)
-                    timesteps,                                   # (B,) — UNet repeats internally
-                    encoder_hidden_states=encoder_hidden_states, # (B, seq, dim) — UNet repeats internally
-                    added_cond_kwargs={
-                        "text_embeds": pooled_embeds,            # (B, 1280)
-                        "time_ids": add_time_ids,                # (B, 6)
-                    },
+                    noisy_latents_5d,                                # (B, C, F, H, W)
+                    timesteps,                                       # (B,)
+                    encoder_hidden_states=encoder_hidden_states,     # (B, seq, dim)
+                    added_cond_kwargs=added_cond_kwargs,
                 ).sample  # (B, C, F, H, W)
+
+                # Flatten output: (B, C, F, H, W) → (B*F, C, H, W) for loss
+                model_pred_flat = (
+                    model_pred
+                    .permute(0, 2, 1, 3, 4)                                          # (B, F, C, H, W)
+                    .contiguous()
+                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
+                )
 
                 # ── Loss ──────────────────────────────────────────────────
                 if noise_scheduler.config.prediction_type == "epsilon":
@@ -292,14 +285,7 @@ def main(args):
                         f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
                     )
 
-                # Flatten output back for loss
-                model_pred_flat = (
-                    model_pred
-                    .permute(0, 2, 1, 3, 4)                                          # (B, F, C, H, W)
-                    .contiguous()
-                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
-                )
-                loss = F.mse_loss(model_pred_flat.float(), noise_flat.float(), reduction="mean")
+                loss = F.mse_loss(model_pred_flat.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
