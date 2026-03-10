@@ -18,7 +18,7 @@ from torch import nn
 
 from diffusers.utils import is_torch_version, logging
 from diffusers.utils.torch_utils import apply_freeu
-from diffusers.models.unet_2d_blocks import *
+from diffusers.models.unets.unet_2d_blocks import *
 
 from unziplora_unet.transformer_2d import *
 

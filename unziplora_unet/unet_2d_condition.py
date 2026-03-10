@@ -24,11 +24,11 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from diffusers.utils import USE_PEFT_BACKEND, BaseOutput, deprecate, logging, scale_lora_layers, unscale_lora_layers
 from diffusers.models.embeddings import Timesteps, GaussianFourierProjection
-from diffusers.models.unet_2d_condition import (
+from diffusers.models.unets.unet_2d_condition import (
     UNet2DConditionModel,
     UNet2DConditionOutput
 )
-from diffusers.models.unet_2d_blocks import (
+from diffusers.models.unets.unet_2d_blocks import (
     UNetMidBlock2D,
     UNetMidBlock2DSimpleCrossAttn,
 )

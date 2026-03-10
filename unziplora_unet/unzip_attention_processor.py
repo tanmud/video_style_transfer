@@ -9,9 +9,9 @@ from diffusers.utils import USE_PEFT_BACKEND, deprecate, logging
 from diffusers.models.attention_processor import Attention
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import maybe_allow_in_graph
-from diffusers.models.lora import LoRACompatibleLinear, LoRALinearLayer
 
 from unziplora_unet.lora_unzip import LoRACompatibleLinear
+from unziplora_unet.lora_linear import *
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 

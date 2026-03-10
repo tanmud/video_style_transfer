@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from diffusers.utils import is_torch_version
 from diffusers.utils.torch_utils import apply_freeu
-from diffusers.models.unet_2d_blocks import (
+from diffusers.models.unets.unet_2d_blocks import (
     CrossAttnDownBlock2D as DiffusersCrossAttnDownBlock2D,
     CrossAttnUpBlock2D as DiffusersCrossAttnUpBlock2D,
     UNetMidBlock2DCrossAttn as DiffusersUNetMidBlock2DCrossAttn,

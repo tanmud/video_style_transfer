@@ -1,6 +1,6 @@
 from typing import Optional
 import torch
-from diffusers.models.lora import LoRACompatibleLinear, LoRALinearLayer
+from unziplora_unet.lora_linear import *
 from torch import nn 
 
 class LoRACompatibleLinear(nn.Linear):
