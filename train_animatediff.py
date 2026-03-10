@@ -263,20 +263,22 @@ def main(args):
                 # Input:  (B*F, 4, H//8, W//8)
                 # Output: (B*F, 4, H//8, W//8)
                 # (B*F, C, H, W) → (B, F, C, H, W)
-                noisy_latents_5d = noisy_latents_flat.reshape(
-                    batch_size, num_frames, *noisy_latents_flat.shape[1:]
+                noisy_latents_5d = (
+                    noisy_latents_flat
+                    .reshape(batch_size, num_frames, *noisy_latents_flat.shape[1:])  # (B, F, C, H, W)
+                    .permute(0, 2, 1, 3, 4)                                          # (B, C, F, H, W)
+                    .contiguous()
                 )
 
                 model_pred = unet(
-                    noisy_latents_5d,                            # (B, F, C, H, W)
+                    noisy_latents_5d,                            # (B, C, F, H, W)
                     timesteps,                                   # (B,)
                     encoder_hidden_states=encoder_hidden_states, # (B, seq, dim)
                     added_cond_kwargs={
                         "text_embeds": pooled_embeds,            # (B, 1280)
                         "time_ids": add_time_ids,                # (B, 6)
                     },
-                ).sample  # (B, F, C, H, W)
-
+                ).sample  # (B, C, F, H, W)
 
                 # ── Loss ──────────────────────────────────────────────────
                 if noise_scheduler.config.prediction_type == "epsilon":
@@ -291,8 +293,13 @@ def main(args):
                     )
 
                 # Flatten output back for loss
-                model_pred_flat = model_pred.reshape(batch_size * num_frames, *model_pred.shape[2:])
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                model_pred_flat = (
+                    model_pred
+                    .permute(0, 2, 1, 3, 4)                                          # (B, F, C, H, W)
+                    .contiguous()
+                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
+                )
+                loss = F.mse_loss(model_pred_flat.float(), noise_flat.float(), reduction="mean")
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
