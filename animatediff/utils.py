@@ -55,9 +55,9 @@ def load_unet_with_motion(
         if unexpected:
             logger.warning(f"Unexpected keys ({len(unexpected)}): {unexpected[:3]} ...")
 
-    del base_unet
+    motion_max_seq = motion_adapter.config.motion_max_seq_length if motion_adapter is not None else None 
     unet.to(device)
-    return unet
+    return unet, motion_max_seq
 
 
 def _state_dict_build_motion_unet(base_unet, motion_adapter, torch_dtype):

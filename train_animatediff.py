@@ -92,7 +92,7 @@ def main(args):
     # ── Step 1: Load UNetMotionModel ──────────────────────────────────────
     if accelerator.is_main_process:
         print("\nLoading UNet with motion modules...")
-    unet = load_unet_with_motion(
+    unet, motion_max_seq = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_adapter_path=args.motion_adapter_path,
         torch_dtype=torch.float32,
@@ -100,11 +100,10 @@ def main(args):
     )
 
     # Validate num_frames against adapter capacity
-    max_seq = unet.config.num_frames
-    if args.num_frames > max_seq:
+    if motion_max_seq is not None and args.num_frames > motion_max_seq:
         raise ValueError(
             f"--num_frames={args.num_frames} exceeds the motion adapter's maximum "
-            f"sequence length of {max_seq}. Reduce --num_frames or use a different adapter."
+            f"sequence length of {motion_max_seq}. Reduce --num_frames or use a different adapter."
         )
 
     # ── Step 2: Inject Stage-1 UnZipLoRA spatial weights ─────────────────
