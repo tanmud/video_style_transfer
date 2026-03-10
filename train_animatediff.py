@@ -79,8 +79,10 @@ def main(args):
     text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder_2"
     )
-    text_encoder.requires_grad_(False).to(accelerator.device)
-    text_encoder_2.requires_grad_(False).to(accelerator.device)
+    text_encoder.requires_grad_(False)
+    text_encoder_2.requires_grad_(False)
+    text_encoder.to(accelerator.device)
+    text_encoder_2.to(accelerator.device)
 
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer"
@@ -89,7 +91,7 @@ def main(args):
         args.pretrained_model_name_or_path, subfolder="tokenizer_2"
     )
 
-    # ── Step 1: Load UNetMotionModel ──────────────────────────────────────
+    # ── Step 1: Load UNet with motion modules ────────────────────────────
     if accelerator.is_main_process:
         print("\nLoading UNet with motion modules...")
     unet, motion_max_seq = load_unet_with_motion(
@@ -99,7 +101,6 @@ def main(args):
         device=accelerator.device,
     )
 
-    # Validate num_frames against adapter capacity
     if motion_max_seq is not None and args.num_frames > motion_max_seq:
         raise ValueError(
             f"--num_frames={args.num_frames} exceeds the motion adapter's maximum "
@@ -164,12 +165,10 @@ def main(args):
     if accelerator.is_main_process:
         print("\nPre-computing text embeddings...")
     with torch.no_grad():
-        # Shape: (1, seq_len, dim)
         instance_prompt_embeds, instance_pooled_embeds = encode_prompt(
             text_encoder, text_encoder_2, tokenizer, tokenizer_2,
             args.instance_prompt, accelerator.device,
         )
-        # Real empty-string uncond for CFG dropout
         uncond_prompt_embeds, uncond_pooled_embeds = encode_prompt(
             text_encoder, text_encoder_2, tokenizer, tokenizer_2,
             "", accelerator.device,
@@ -185,44 +184,55 @@ def main(args):
         print(f"\nStarting training for {args.max_train_steps} steps\n")
 
     global_step = 0
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(args.max_train_steps),
+        disable=not accelerator.is_local_main_process,
+    )
 
     for epoch in range(args.num_train_epochs):
         for batch in dataloader:
             with accelerator.accumulate(unet):
-                # frames: (B, F, C, H, W)
+                # frames from dataloader: (B, F, C, H, W)
                 frames = batch["frames"].to(accelerator.device)
                 batch_size = frames.shape[0]
                 num_frames = frames.shape[1]
 
-                # ── VAE encode ────────────────────────────────────────────
-                # VAE works per-frame: flatten to (B*F, C, H, W)
+                # ── VAE encode: flatten frames into batch dim ─────────────
+                # VAE is 2D-only: (B, F, C, H, W) → (B*F, C, H, W)
                 frames_flat = frames.reshape(-1, *frames.shape[2:]).to(dtype=vae.dtype)
                 with torch.no_grad():
                     latents_flat = vae.encode(frames_flat).latent_dist.sample()
                     latents_flat = latents_flat * vae.config.scaling_factor
                 # latents_flat: (B*F, 4, H//8, W//8)
 
-                # ── Noise & timesteps ─────────────────────────────────────
+                # ── Noise ─────────────────────────────────────────────────
                 noise_flat = torch.randn_like(latents_flat)  # (B*F, 4, H//8, W//8)
 
-                # One timestep per batch item — same t applied to all frames of a clip
+                # One timestep per clip, expanded to match flat frame count
                 timesteps = torch.randint(
                     0, noise_scheduler.config.num_train_timesteps,
                     (batch_size,), device=latents_flat.device,
                 )
-                # Expand to (B*F,) for add_noise which works on flat latents
-                timesteps_expanded = timesteps.repeat_interleave(num_frames)
+                timesteps_expanded = timesteps.repeat_interleave(num_frames)  # (B*F,)
                 noisy_latents_flat = noise_scheduler.add_noise(
                     latents_flat, noise_flat, timesteps_expanded
-                )
-                # (B*F, 4, H//8, W//8) → (B, F, 4, H//8, W//8) for UNetMotionModel
-                noisy_latents = noisy_latents_flat.reshape(
-                    batch_size, num_frames, *noisy_latents_flat.shape[1:]
+                )  # (B*F, 4, H//8, W//8)
+
+                # ── Prepare UNet input ────────────────────────────────────
+                # UNetMotionModel.forward() takes (B*F, C, H, W) with the
+                # frames interleaved in the CHANNEL-FIRST order after
+                # permute: (B,F,C,H,W) → permute(0,2,1,3,4) → (B,C,F,H,W)
+                # → reshape → (B*F, C, H, W)
+                noisy_latents_unet = (
+                    noisy_latents_flat
+                    .reshape(batch_size, num_frames, *noisy_latents_flat.shape[1:])  # (B, F, C, H, W)
+                    .permute(0, 2, 1, 3, 4)                                          # (B, C, F, H, W)
+                    .reshape(batch_size * num_frames, *noisy_latents_flat.shape[1:]) # (B*F, C, H, W)
+                    .contiguous()
                 )
 
                 # ── Text conditioning ─────────────────────────────────────
-                # UNetMotionModel broadcasts internally — pass (B, seq, dim) NOT (B*F, seq, dim)
+                # All conditioning must be (B*F, ...) to match the flat input
                 use_uncond = torch.rand(1).item() < 0.1
                 if use_uncond:
                     encoder_hidden_states = uncond_prompt_embeds.repeat(batch_size, 1, 1)
@@ -230,10 +240,11 @@ def main(args):
                 else:
                     encoder_hidden_states = instance_prompt_embeds.repeat(batch_size, 1, 1)
                     pooled_embeds = instance_pooled_embeds.repeat(batch_size, 1)
-                # encoder_hidden_states: (B, seq_len, dim)
-                # pooled_embeds: (B, 1280)
+                # repeat_interleave to match (B*F, seq, dim)
+                encoder_hidden_states = encoder_hidden_states.repeat_interleave(num_frames, dim=0)
+                pooled_embeds = pooled_embeds.repeat_interleave(num_frames, dim=0)
 
-                # SDXL time ids: (B, 6)
+                # SDXL added conditions: (B*F, 6)
                 add_time_ids = torch.cat([
                     torch.tensor([args.resolution, args.resolution]),
                     torch.tensor([0, 0]),
@@ -241,35 +252,37 @@ def main(args):
                 ]).unsqueeze(0).repeat(batch_size, 1).to(
                     accelerator.device, dtype=latents_flat.dtype
                 )
+                add_time_ids = add_time_ids.repeat_interleave(num_frames, dim=0)  # (B*F, 6)
+
                 added_cond_kwargs = {
-                    "text_embeds": pooled_embeds,   # (B, 1280)
-                    "time_ids": add_time_ids,        # (B, 6)
+                    "text_embeds": pooled_embeds,   # (B*F, 1280)
+                    "time_ids": add_time_ids,        # (B*F, 6)
                 }
 
                 # ── UNet forward ──────────────────────────────────────────
-                # Input:  (B, F, 4, H//8, W//8)
-                # Output: (B, F, 4, H//8, W//8)
+                # Input:  (B*F, 4, H//8, W//8)
+                # Output: (B*F, 4, H//8, W//8)
                 model_pred = unet(
-                    noisy_latents,                              # (B, F, 4, H//8, W//8)
-                    timesteps,                                  # (B,)
-                    encoder_hidden_states=encoder_hidden_states, # (B, seq, dim)
+                    noisy_latents_unet,                              # (B*F, 4, H//8, W//8)
+                    timesteps_expanded,                              # (B*F,)
+                    encoder_hidden_states=encoder_hidden_states,     # (B*F, seq, dim)
                     added_cond_kwargs=added_cond_kwargs,
-                ).sample
-
-                # Flatten output back to (B*F, 4, H//8, W//8) for loss
-                model_pred_flat = model_pred.reshape(batch_size * num_frames, *model_pred.shape[2:])
+                    num_frames=num_frames,
+                ).sample  # (B*F, 4, H//8, W//8)
 
                 # ── Loss ──────────────────────────────────────────────────
                 if noise_scheduler.config.prediction_type == "epsilon":
-                    target = noise_flat                    # (B*F, 4, H//8, W//8)
+                    target = noise_flat                              # (B*F, 4, H//8, W//8)
                 elif noise_scheduler.config.prediction_type == "v_prediction":
                     target = noise_scheduler.get_velocity(
                         latents_flat, noise_flat, timesteps_expanded
-                    )                                      # (B*F, 4, H//8, W//8)
+                    )
                 else:
-                    raise ValueError(f"Unknown prediction type: {noise_scheduler.config.prediction_type}")
+                    raise ValueError(
+                        f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
+                    )
 
-                loss = F.mse_loss(model_pred_flat.float(), target.float(), reduction="mean")
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
@@ -293,7 +306,10 @@ def main(args):
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
                         unwrapped_unet = accelerator.unwrap_model(unet)
-                        save_checkpoint(unwrapped_unet, args.output_dir, global_step)
+                        save_checkpoint(
+                            unwrapped_unet, args.output_dir,
+                            global_step, save_full_model=False,
+                        )
 
                 if global_step >= args.max_train_steps:
                     break
@@ -302,7 +318,7 @@ def main(args):
 
     if accelerator.is_main_process:
         unwrapped_unet = accelerator.unwrap_model(unet)
-        save_checkpoint(unwrapped_unet, args.output_dir, "final")
+        save_checkpoint(unwrapped_unet, args.output_dir, "final", save_full_model=False)
         print(f"\nTraining complete! Saved to {args.output_dir}")
     accelerator.end_training()
 
@@ -312,10 +328,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--pretrained_model_name_or_path", type=str,
                         default="stabilityai/stable-diffusion-xl-base-1.0")
-    parser.add_argument("--unziplora_content_path", type=str, required=True)
-    parser.add_argument("--unziplora_style_path", type=str, required=True)
-    parser.add_argument("--unziplora_content_weight_path", type=str, required=True)
-    parser.add_argument("--unziplora_style_weight_path", type=str, required=True)
+    parser.add_argument("--unziplora_content_path", type=str, required=True,
+                        help="Path to Stage-1 content LoRA dir (content/*.safetensors)")
+    parser.add_argument("--unziplora_style_path", type=str, required=True,
+                        help="Path to Stage-1 style LoRA dir (style/*.safetensors)")
+    parser.add_argument("--unziplora_content_weight_path", type=str, required=True,
+                        help="Path to merger_content.pth")
+    parser.add_argument("--unziplora_style_weight_path", type=str, required=True,
+                        help="Path to merger_style.pth")
     parser.add_argument("--motion_adapter_path", type=str, required=True,
                         help="HF hub id or local dir for MotionAdapter")
     parser.add_argument("--instance_data_dir", type=str, required=True)
