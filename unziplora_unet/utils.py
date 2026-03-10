@@ -22,6 +22,8 @@ from transformers import (
     )
 from record_utils.cone import cone_matrix, cone_column_sparsity, draw_concatenated_heatmap
 
+from unziplora_unet.lora_linear import LoRACompatibleLinear
+
 LORA_WEIGHT_NAME_SAFE = "pytorch_lora_weights.safetensors"
 
 universal_nevigate = [
@@ -428,6 +430,11 @@ def insert_unziplora_to_unet(
             "state_dict_merger_style": state_dict_merge_style 
         }
 
+        _make_lora_compatible(attn_module, "to_q")
+        _make_lora_compatible(attn_module, "to_k")
+        _make_lora_compatible(attn_module, "to_v")
+        _make_lora_compatible(attn_module.to_out, "0") # to_out is a sequential container, we need to specify the index
+
         attn_module.to_q.set_lora_layer(
             initialize_unziplora_layer_for_inference(
                 in_features=attn_module.to_q.in_features,
@@ -689,6 +696,7 @@ def lora_merge_cone_select(unet: UNet2DConditionModel, mask_dictionary_style={},
         return unet, draw_concatenated_heatmap(logged_cone_layer_content), draw_concatenated_heatmap(logged_cone_layer_style)
     else:
         return unet, logged_cone_layer_content, logged_cone_layer_style
+
 def lora_gradient_zeroout(unet: UNet2DConditionModel, finetune_mask):
     '''
     mask out the gradient during training to only allow training of certain columns
@@ -698,3 +706,18 @@ def lora_gradient_zeroout(unet: UNet2DConditionModel, finetune_mask):
             lora_layer = getattr(module, "lora_layer")
             if lora_layer is not None:
                 lora_layer.set_gradient_mask(finetune_mask)
+
+def _make_lora_compatible(module, attr):
+    """Swap a plain nn.Linear -> LoRACompatibleLinear in-place if needed."""
+    layer = getattr(module, attr)
+    if not hasattr(layer, "set_lora_layer"):
+        new_layer = LoRACompatibleLinear(
+            layer.in_features, layer.out_features,
+            bias=layer.bias is not None,
+            device=layer.weight.device,
+            dtype=layer.weight.dtype,
+        )
+        new_layer.weight = layer.weight
+        if layer.bias is not None:
+            new_layer.bias = layer.bias
+        setattr(module, attr, new_layer)
