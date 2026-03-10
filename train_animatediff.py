@@ -262,12 +262,21 @@ def main(args):
                 # ── UNet forward ──────────────────────────────────────────
                 # Input:  (B*F, 4, H//8, W//8)
                 # Output: (B*F, 4, H//8, W//8)
+                # (B*F, C, H, W) → (B, F, C, H, W)
+                noisy_latents_5d = noisy_latents_flat.reshape(
+                    batch_size, num_frames, *noisy_latents_flat.shape[1:]
+                )
+
                 model_pred = unet(
-                    noisy_latents_unet,                              # (B*F, 4, H//8, W//8)
-                    timesteps_expanded,                              # (B*F,)
-                    encoder_hidden_states=encoder_hidden_states,     # (B*F, seq, dim)
-                    added_cond_kwargs=added_cond_kwargs,
-                ).sample  # (B*F, 4, H//8, W//8)
+                    noisy_latents_5d,                            # (B, F, C, H, W)
+                    timesteps,                                   # (B,)
+                    encoder_hidden_states=encoder_hidden_states, # (B, seq, dim)
+                    added_cond_kwargs={
+                        "text_embeds": pooled_embeds,            # (B, 1280)
+                        "time_ids": add_time_ids,                # (B, 6)
+                    },
+                ).sample  # (B, F, C, H, W)
+
 
                 # ── Loss ──────────────────────────────────────────────────
                 if noise_scheduler.config.prediction_type == "epsilon":
@@ -281,6 +290,8 @@ def main(args):
                         f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
                     )
 
+                # Flatten output back for loss
+                model_pred_flat = model_pred.reshape(batch_size * num_frames, *model_pred.shape[2:])
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
