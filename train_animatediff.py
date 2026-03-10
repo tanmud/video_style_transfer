@@ -118,6 +118,34 @@ def main(args):
         args.unziplora_style_weight_path,
     )
     unziplora_set_forward_type(unet, type="both")
+    # ── DEBUG: find which processor is running and where dims balloon ─────────
+    original_processors = dict(unet.attn_processors)
+
+    class DebugProcessor:
+        def __init__(self, name, real_processor):
+            self.name = name
+            self.real_processor = real_processor
+
+        def __call__(self, attn, hidden_states, encoder_hidden_states=None, **kwargs):
+            hs_shape = tuple(hidden_states.shape)
+            enc_shape = tuple(encoder_hidden_states.shape) if encoder_hidden_states is not None else None
+            out = self.real_processor(attn, hidden_states, encoder_hidden_states=encoder_hidden_states, **kwargs)
+            out_shape = tuple(out.shape)
+            if out_shape[1] != hs_shape[1]:  # seq dim changed — this is the balloon
+                print(f"[BALLOON] {self.name}")
+                print(f"  hidden_states in : {hs_shape}")
+                print(f"  encoder_hidden_states in: {enc_shape}")
+                print(f"  output           : {out_shape}")
+                print(f"  processor type   : {type(self.real_processor).__module__}.{type(self.real_processor).__name__}")
+            return out
+
+    debug_processors = {
+        name: DebugProcessor(name, proc)
+        for name, proc in original_processors.items()
+    }
+    unet.set_attn_processor(debug_processors)
+    # ── END DEBUG ─────────────────────────────────────────────────────────────
+
 
     # ── Step 3: Freeze everything except motion modules ───────────────────
     freeze_spatial_layers(unet)
