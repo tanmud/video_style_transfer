@@ -272,8 +272,8 @@ def main(args):
 
                 model_pred = unet(
                     noisy_latents_5d,                            # (B, C, F, H, W)
-                    timesteps,                                   # (B,)
-                    encoder_hidden_states=encoder_hidden_states, # (B, seq, dim)
+                    timesteps,                                   # (B,) — UNet repeats internally
+                    encoder_hidden_states=encoder_hidden_states, # (B, seq, dim) — UNet repeats internally
                     added_cond_kwargs={
                         "text_embeds": pooled_embeds,            # (B, 1280)
                         "time_ids": add_time_ids,                # (B, 6)
