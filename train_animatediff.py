@@ -267,7 +267,6 @@ def main(args):
                     timesteps_expanded,                              # (B*F,)
                     encoder_hidden_states=encoder_hidden_states,     # (B*F, seq, dim)
                     added_cond_kwargs=added_cond_kwargs,
-                    num_frames=num_frames,
                 ).sample  # (B*F, 4, H//8, W//8)
 
                 # ── Loss ──────────────────────────────────────────────────
