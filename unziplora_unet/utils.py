@@ -407,6 +407,8 @@ def insert_unziplora_to_unet(
         if "motion_modules" in attn_processor_name:
             print("FOUND: motion module in unziplora")
             continue
+        print(f"Inserting UnZipLoRA to {attn_processor_name}...")
+
         # Parse the attention module.
         attn_module = unet
         for n in attn_processor_name.split(".")[:-1]:

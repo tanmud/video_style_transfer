@@ -246,7 +246,6 @@ def main(args):
                     timesteps,          # (B,) — UNet broadcasts over F frames
                     encoder_hidden_states=encoder_hidden_states,
                     added_cond_kwargs=added_cond_kwargs,
-                    num_frames=num_frames,
                 ).sample
 
                 if noise_scheduler.config.prediction_type == "epsilon":
