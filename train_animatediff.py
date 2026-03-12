@@ -18,6 +18,7 @@ from animatediff.utils import (
 )
 from animatediff.video_dataset import VideoDataset, collate_fn
 from unziplora_unet.utils import insert_unziplora_to_unet, unziplora_set_forward_type
+from unziplora_unet.unzip_attention_processor import AttnProcessor2_0 as UnZipAttnProcessor2_0
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
@@ -117,6 +118,13 @@ def main(args):
         args.unziplora_content_weight_path,
         args.unziplora_style_weight_path,
     )
+    new_processors = {}
+    for name, proc in unet.attn_processors.items():
+        if "motion_modules" not in name:
+            new_processors[name] = UnZipAttnProcessor2_0()
+        else:
+            new_processors[name] = proc
+    unet.set_attn_processor(new_processors)
     unziplora_set_forward_type(unet, type="both")
     # ── DEBUG: find which processor is running and where dims balloon ─────────
     original_processors = dict(unet.attn_processors)
