@@ -13,19 +13,19 @@ export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_
 
 # Generation settings
 export NUM_FRAMES=16
-export NUM_INFERENCE_STEPS=50
-export GUIDANCE_SCALE=7.5
-export HEIGHT=512
-export WIDTH=512
+export NUM_INFERENCE_STEPS=75
+export GUIDANCE_SCALE=10
+export HEIGHT=1024
+export WIDTH=1024
 export FPS=8
 export MIXED_PRECISION="bf16"
 
 # Three generation modes:
-# type=both  -> full subject (instance prompt)
+# type=both  
 export INSTANCE_PROMPT="A male biker in cartoon style biking on the street"
-# type=content -> swap content, keep learned cartoon style
+# type=content 
 export CONTENT_PROMPT="A male biker biking in a snowy landscape"
-# type=style  -> swap style onto new subject, keep learned motion
+# type=style  
 export STYLE_PROMPT="A dog running in cartoon style"
 
 python inference_animatediff.py \

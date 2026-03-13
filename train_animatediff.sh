@@ -23,7 +23,7 @@ export WANDB_MODE="offline"
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker_video"
 export NUM_FRAMES=16  
-export RESOLUTION=512
+export RESOLUTION=1024
 
 # Stage-1 UnZipLoRA outputs (required for Stage-2)
 export UNZIPLORA_CONTENT="models/male_biker_image/male_biker_image_content"
@@ -32,11 +32,12 @@ export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/male_biker_image_merge
 export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_style.pth"
 
 # Training
-export STEPS=2000
-export LEARNING_RATE=2e-5
+export STEPS=4000
+export LEARNING_RATE=1e-5
 export PROMPT="A male biker in cartoon style biking on the street"
-export GRAD_ACC_STEPS=1
+export GRAD_ACC_STEPS=4
 export MIXED_PRECISION="bf16"
+export WARMUP_STEPS=100
 
 accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
@@ -56,7 +57,7 @@ accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --learning_rate="${LEARNING_RATE}" \
   --report_to="wandb" \
   --lr_scheduler="constant" \
-  --lr_warmup_steps=0 \
+  --lr_warmup_steps=$WARMUP_STEPS \
   --max_train_steps=$STEPS \
   --checkpointing_steps=500 \
   --mixed_precision=$MIXED_PRECISION \
