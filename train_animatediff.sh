@@ -32,7 +32,7 @@ export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/male_biker_image_merge
 export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_style.pth"
 
 # Training
-export STEPS=4000
+export STEPS=3000
 export LEARNING_RATE=1e-5
 export PROMPT="A male biker in cartoon style biking on the street"
 export GRAD_ACC_STEPS=1
