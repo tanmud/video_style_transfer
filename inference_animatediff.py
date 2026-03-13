@@ -218,7 +218,7 @@ def main(args):
 
     # 4. UNet + trained motion modules
     print("Loading UNet with trained motion modules...")
-    unet = load_unet_with_motion(
+    unet, _= load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_adapter_path=args.motion_adapter_path,
         torch_dtype=dtype,
