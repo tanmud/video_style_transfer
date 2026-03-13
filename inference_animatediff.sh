@@ -1,5 +1,5 @@
 export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
-export MOTION_ADAPTER_PATH="${STAGE2_DIR}/checkpoint-final"
+export MOTION_ADAPTER_PATH="guoyww/animatediff-motion-adapter-sdxl-beta"
 
 # Paths
 export STAGE2_DIR="models/male_biker_video"

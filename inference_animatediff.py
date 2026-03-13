@@ -9,8 +9,8 @@ from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokeniz
 from tqdm import tqdm
 
 from animatediff.utils import load_unet_with_motion
-from unziplora_unet.utils import insert_unziplora_to_unet, unziplora_set_forward_type
 from animatediff.attention_processor import AnimateDiffAttnProcessor2_0
+from unziplora_unet.utils import insert_unziplora_to_unet, unziplora_set_forward_type
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
