@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from animatediff.utils import load_unet_with_motion
 from unziplora_unet.utils import insert_unziplora_to_unet, unziplora_set_forward_type
+from animatediff.attention_processor import AnimateDiffAttnProcessor2_0
 
 
 def encode_prompt(text_encoder, text_encoder_2, tokenizer, tokenizer_2, prompt, device):
@@ -101,7 +102,7 @@ def generate_video(
 
     # Initial latents: (B*F, 4, H//8, W//8) with B=1
     latents = torch.randn(
-        (args.num_frames, 4, args.height // 8, args.width // 8),
+        (1, 4, args.num_frames, args.height // 8, args.width // 8),
         device=device, dtype=unet.dtype,
     )
     latents = latents * scheduler.init_noise_sigma
@@ -158,9 +159,9 @@ def generate_video(
 
         latents = scheduler.step(noise_pred, t, latents).prev_sample
 
-    # Decode (B*F, 4, H//8, W//8) → frames
+    # AFTER — reshape (1, 4, F, H//8, W//8) → (F, 4, H//8, W//8) for per-frame decode
     print("Decoding frames...")
-    latents_dec = latents / vae.config.scaling_factor
+    latents_dec = (latents / vae.config.scaling_factor).squeeze(0).permute(1, 0, 2, 3)
     frames = []
     for i in range(args.num_frames):
         with torch.no_grad():
@@ -234,6 +235,14 @@ def main(args):
         args.unziplora_style_weight_path,
     )
     unet.requires_grad_(False).to(device)
+
+    new_processors = {}
+    for name, proc in unet.attn_processors.items():
+        if "motion_modules" not in name:
+            new_processors[name] = AnimateDiffAttnProcessor2_0()
+        else:
+            new_processors[name] = proc
+    unet.set_attn_processor(new_processors)
 
     # 6. DDIM scheduler — works correctly at 50 inference steps (DDPM does NOT)
     print("Loading DDIMScheduler...")
