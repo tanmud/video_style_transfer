@@ -22,7 +22,7 @@ export WANDB_MODE="offline"
 # Data
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker_video"
-export NUM_FRAMES=8
+export NUM_FRAMES=16
 export RESOLUTION=1024
 
 # Stage-1 UnZipLoRA outputs (required for Stage-2)
@@ -35,7 +35,7 @@ export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_
 export STEPS=4000
 export LEARNING_RATE=1e-5
 export PROMPT="A male biker in cartoon style biking on the street"
-export GRAD_ACC_STEPS=4
+export GRAD_ACC_STEPS=1
 export MIXED_PRECISION="bf16"
 export WARMUP_STEPS=100
 
