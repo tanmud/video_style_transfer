@@ -252,7 +252,7 @@ class Transformer2DModel(Transformer2DModel):
 
         # 2. Blocks
         # * compute hidden states input to encoder for both combiend prompts, style and content
-        if self.caption_projection is not None:
+        if getattr(self, 'caption_projection', None) is not None:
             batch_size = hidden_states.shape[0]
             encoder_hidden_states = self.caption_projection(encoder_hidden_states)
             encoder_hidden_states = encoder_hidden_states.view(batch_size, -1, hidden_states.shape[-1])
