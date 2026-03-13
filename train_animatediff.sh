@@ -22,7 +22,7 @@ export WANDB_MODE="offline"
 # Data
 export INSTANCE_DIR="/work/10572/tmudali/vista/video_style_transfer/instance_videos/male_biker"
 export OUTPUT_DIR="models/male_biker_video"
-export NUM_FRAMES=16  
+export NUM_FRAMES=8
 export RESOLUTION=1024
 
 # Stage-1 UnZipLoRA outputs (required for Stage-2)
