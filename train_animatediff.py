@@ -98,9 +98,12 @@ def main(args):
     unet, motion_max_seq = load_unet_with_motion(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         motion_adapter_path=args.motion_adapter_path,
-        torch_dtype=torch.float32,
+        torch_dtype=dtype,
         device=accelerator.device,
     )
+
+    if args.enable_gradient_checkpointing:
+        unet.enable_gradient_checkpointing()
 
     if motion_max_seq is not None and args.num_frames > motion_max_seq:
         raise ValueError(
@@ -390,6 +393,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_train_epochs", type=int, default=100)
     parser.add_argument("--max_train_steps", type=int, default=2000)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
+    parser.add_argument("--enable-gradient_checkpointing", action="store_true")
     parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--lr_scheduler", type=str, default="constant")
     parser.add_argument("--lr_warmup_steps", type=int, default=0)

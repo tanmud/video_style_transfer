@@ -54,6 +54,7 @@ accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --num_frames=$NUM_FRAMES \
   --train_batch_size=1 \
   --gradient_accumulation_steps=$GRAD_ACC_STEPS \
+  --enable-gradient_checkpointing \
   --learning_rate="${LEARNING_RATE}" \
   --report_to="wandb" \
   --lr_scheduler="constant" \
