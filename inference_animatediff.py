@@ -129,7 +129,6 @@ def generate_video(
                             "text_embeds": uncond_pooled,       # (1, 1280)
                             "time_ids": add_time_ids,           # (1, 6)
                         },
-                        num_frames=args.num_frames,
                     ).sample
                     noise_pred_text = unet(
                         scaled,
@@ -139,7 +138,6 @@ def generate_video(
                             "text_embeds": cond_pooled,
                             "time_ids": add_time_ids,
                         },
-                        num_frames=args.num_frames,
                     ).sample
                     noise_pred = (
                         noise_pred_uncond
@@ -154,7 +152,6 @@ def generate_video(
                             "text_embeds": cond_pooled,
                             "time_ids": add_time_ids,
                         },
-                        num_frames=args.num_frames,
                     ).sample
 
         latents = scheduler.step(noise_pred, t, latents).prev_sample
