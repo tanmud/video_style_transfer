@@ -32,12 +32,13 @@ export UNZIPLORA_CONTENT_WEIGHTS="models/male_biker_image/male_biker_image_merge
 export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_style.pth"
 
 # Training
-export STEPS=3000
-export LEARNING_RATE=1e-5
+export STEPS=1000
+export LEARNING_RATE=2e-5
 export PROMPT="A male biker in cartoon style biking on the street"
 export GRAD_ACC_STEPS=1
 export MIXED_PRECISION="bf16"
 export WARMUP_STEPS=100
+export LR_SCHED="cosine"
 
 accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
@@ -57,7 +58,7 @@ accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --enable-gradient_checkpointing \
   --learning_rate="${LEARNING_RATE}" \
   --report_to="wandb" \
-  --lr_scheduler="constant" \
+  --lr_scheduler=$LR_SCHED \
   --lr_warmup_steps=$WARMUP_STEPS \
   --max_train_steps=$STEPS \
   --checkpointing_steps=500 \
