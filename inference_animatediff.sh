@@ -45,4 +45,5 @@ python inference_animatediff.py \
   --height=$HEIGHT \
   --width=$WIDTH \
   --fps=$FPS \
-  --mixed_precision=$MIXED_PRECISION
+  --mixed_precision=$MIXED_PRECISION \
+  --use_extended_attention 
