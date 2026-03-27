@@ -320,7 +320,6 @@ def main(args):
                     raise ValueError(
                         f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
                     )
-                target = noise_flat
 
                 # Flatten output back to (B*F, C, H, W) for loss against noise_flat
                 model_pred_flat = (
