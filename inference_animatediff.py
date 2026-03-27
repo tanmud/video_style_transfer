@@ -113,7 +113,7 @@ def generate_video(
         # Scale latents by current sigma
         scaled = scheduler.scale_model_input(latents, t)
         # Timestep broadcast: (B,) = (1,) for B=1
-        t_batch = torch.tensor([t], device=device).expand(args.num_frames)
+        t_batch = torch.tensor([t], device=device)
 
         with torch.no_grad():
             autocast_dtype = torch.bfloat16 if args.mixed_precision == "bf16" else \
