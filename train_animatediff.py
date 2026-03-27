@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from accelerate import Accelerator
-from diffusers import AutoencoderKL, DDPMScheduler
+from diffusers import AutoencoderKL, EulerDiscreteScheduler
 from diffusers.optimization import get_scheduler
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 from tqdm.auto import tqdm
@@ -168,7 +168,7 @@ def main(args):
     if accelerator.is_main_process:
         print_parameter_summary(unet)
 
-    noise_scheduler = DDPMScheduler.from_pretrained(
+    noise_scheduler = EulerDiscreteScheduler.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="scheduler"
     )
 
@@ -320,6 +320,7 @@ def main(args):
                     raise ValueError(
                         f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
                     )
+                target = noise_flat
 
                 # Flatten output back to (B*F, C, H, W) for loss against noise_flat
                 model_pred_flat = (
