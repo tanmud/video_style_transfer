@@ -14,7 +14,7 @@ export UNZIPLORA_STYLE_WEIGHTS="models/male_biker_image/male_biker_image_merger_
 # Generation settings
 export NUM_FRAMES=16
 export NUM_INFERENCE_STEPS=75
-export GUIDANCE_SCALE=10
+export GUIDANCE_SCALE=7.5
 export HEIGHT=1024
 export WIDTH=1024
 export FPS=8
