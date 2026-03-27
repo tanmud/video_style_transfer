@@ -1,9 +1,12 @@
-export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
-export MOTION_ADAPTER_PATH="guoyww/animatediff-motion-adapter-sdxl-beta"
+#!bin/bash
 
 # Paths
 export STAGE2_DIR="models/male_biker_video"
 export SAVE_DIR="output/male_biker"
+export CHECKPOINT="checkpoint-final"
+
+export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
+export MOTION_ADAPTER_PATH="$STAGE2_DIR/$CHECKPOINT"
 
 # Stage-1 UnZipLoRA outputs
 export UNZIPLORA_CONTENT="models/male_biker_image/male_biker_image_content"
