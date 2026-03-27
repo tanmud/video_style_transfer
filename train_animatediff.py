@@ -313,9 +313,10 @@ def main(args):
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise_flat                              # (B*F, 4, H//8, W//8)
                 elif noise_scheduler.config.prediction_type == "v_prediction":
-                    target = noise_scheduler.get_velocity(
-                        latents_flat, noise_flat, timesteps_expanded
-                    )
+                    latents_5d = latents_flat.reshape(batch_size, num_frames, *latents_flat.shape[1:]).permute(0,2,1,3,4)
+                    noise_5d   = noise_flat.reshape(batch_size, num_frames, *noise_flat.shape[1:]).permute(0,2,1,3,4)
+                    target_5d  = noise_scheduler.get_velocity(latents_5d, noise_5d, timesteps)
+                    target     = target_5d.permute(0,2,1,3,4).reshape(batch_size * num_frames, *latents_flat.shape[1:])
                 else:
                     raise ValueError(
                         f"Unknown prediction type: {noise_scheduler.config.prediction_type}"
