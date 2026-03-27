@@ -74,6 +74,7 @@ def generate_video(
                   "style"   → re-contextualize style only
     """
     print(f"\n[type={forward_type}] {prompt}")
+    scheduler.set_timesteps(args.num_inference_steps, device=device)
 
     # Set which UnZipLoRA pathway is active for this generation
     unziplora_set_forward_type(unet, type=forward_type)
