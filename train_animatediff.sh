@@ -40,6 +40,24 @@ export MIXED_PRECISION="bf16"
 export WARMUP_STEPS=100
 export LR_SCHED="cosine"
 
+# ── Option B: Temporal LoRA + orthogonality loss ───────────────────────────
+# rank=32 keeps temporal delta small; alpha=1.0 → scale=1/32.
+# lambda_orth=1e-4 is conservative — increase to 1e-3 if LoRA bleedthrough
+# persists after ~500 steps (watch loss_orth vs loss_mse in wandb).
+# Set --temporal_lora_rank=0 and --lambda_orth=0 to disable entirely.
+export TEMPORAL_LORA_RANK=32
+export TEMPORAL_LORA_ALPHA=1.0
+export LAMBDA_ORTH=1e-4
+
+# ── Option C: Unfreeze merger scalars ─────────────────────────────────────
+# Adds --unfreeze_mergers flag. Remove it to keep mergers frozen (original behaviour).
+# When active, merger_*_stage2.pth files are saved alongside motion_modules.pth.
+# Pass those files as --unziplora_*_weight_path at inference instead of Stage-1 paths.
+
+# NOTE: --enable_gradient_checkpointing (underscore) — the original script used
+# --enable-gradient_checkpointing (hyphen) which argparse does not recognise.
+# Fixed here.
+
 accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --name=$WANDB_NAME \
@@ -55,12 +73,16 @@ accelerate launch --mixed_precision=$MIXED_PRECISION train_animatediff.py \
   --num_frames=$NUM_FRAMES \
   --train_batch_size=1 \
   --gradient_accumulation_steps=$GRAD_ACC_STEPS \
-  --enable-gradient_checkpointing \
+  --enable_gradient_checkpointing \
   --learning_rate="${LEARNING_RATE}" \
   --report_to="wandb" \
   --lr_scheduler=$LR_SCHED \
   --lr_warmup_steps=$WARMUP_STEPS \
   --max_train_steps=$STEPS \
-  --checkpointing_steps=500 \
+  --checkpointing_steps=250 \
   --mixed_precision=$MIXED_PRECISION \
-  --seed="0"
+  --seed="0" \
+  --temporal_lora_rank=$TEMPORAL_LORA_RANK \
+  --temporal_lora_alpha=$TEMPORAL_LORA_ALPHA \
+  --lambda_orth=$LAMBDA_ORTH \
+  --unfreeze_mergers
