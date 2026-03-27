@@ -1,4 +1,4 @@
-#!bin/bash
+#!/bin/bash
 
 # Paths
 export STAGE2_DIR="models/male_biker_video"
