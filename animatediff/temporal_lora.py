@@ -103,11 +103,12 @@ def build_spatial_lora_index(unet) -> Dict[str, object]:
         except ValueError:
             continue
         prefix   = ".".join(parts[:mm_idx])
+        mm_index = parts[mm_idx + 1]    
         after_mm = parts[mm_idx + 2:]          # skip "motion_modules", "{i}"
         if "temporal_transformer" in after_mm:
             tt_idx   = after_mm.index("temporal_transformer")
             after_mm = after_mm[tt_idx + 1:]   # skip "temporal_transformer"
-        spatial_path = prefix + "." + ".".join(after_mm)
+        spatial_path = prefix + ".attentions." + mm_index + "." + ".".join(after_mm)
         if spatial_path not in spatial_map:
             continue
         lora = spatial_map[spatial_path]
