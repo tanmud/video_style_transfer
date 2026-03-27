@@ -69,7 +69,7 @@ def main(args):
     )
 
     vae = AutoencoderKL.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="vae", torch_dtype=dtype,
+        args.pretrained_model_name_or_path, subfolder="vae", torch_dtype=torch.float32,
     )
     vae.requires_grad_(False)
     vae.to(accelerator.device)
@@ -131,36 +131,6 @@ def main(args):
     unet.set_attn_processor(new_processors)
 
     unziplora_set_forward_type(unet, type="both")
-
-
-
-    # ── DEBUG: find which processor is running and where dims balloon ─────────
-    original_processors = dict(unet.attn_processors)
-
-    class DebugProcessor:
-        def __init__(self, name, real_processor):
-            self.name = name
-            self.real_processor = real_processor
-
-        def __call__(self, attn, hidden_states, encoder_hidden_states=None, **kwargs):
-            hs_shape = tuple(hidden_states.shape)
-            enc_shape = tuple(encoder_hidden_states.shape) if encoder_hidden_states is not None else None
-            out = self.real_processor(attn, hidden_states, encoder_hidden_states=encoder_hidden_states, **kwargs)
-            out_shape = tuple(out.shape)
-            if out_shape[1] != hs_shape[1]:  # seq dim changed — this is the balloon
-                print(f"[BALLOON] {self.name}")
-                print(f"  hidden_states in : {hs_shape}")
-                print(f"  encoder_hidden_states in: {enc_shape}")
-                print(f"  output           : {out_shape}")
-                print(f"  processor type   : {type(self.real_processor).__module__}.{type(self.real_processor).__name__}")
-            return out
-
-    debug_processors = {
-        name: DebugProcessor(name, proc)
-        for name, proc in original_processors.items()
-    }
-    unet.set_attn_processor(debug_processors)
-    # ── END DEBUG ─────────────────────────────────────────────────────────────
 
 
     # ── Step 3: Freeze everything except motion modules ───────────────────
@@ -313,6 +283,7 @@ def main(args):
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise_flat                              # (B*F, 4, H//8, W//8)
                 elif noise_scheduler.config.prediction_type == "v_prediction":
+                    print("WARNING: v_prediction branch active — confirm this is intended")
                     latents_5d = latents_flat.reshape(batch_size, num_frames, *latents_flat.shape[1:]).permute(0,2,1,3,4)
                     noise_5d   = noise_flat.reshape(batch_size, num_frames, *noise_flat.shape[1:]).permute(0,2,1,3,4)
                     target_5d  = noise_scheduler.get_velocity(latents_5d, noise_5d, timesteps)
