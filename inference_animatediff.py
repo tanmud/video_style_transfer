@@ -103,7 +103,7 @@ def generate_video(
 
     # Initial latents: (B*F, 4, H//8, W//8) with B=1
     latents = torch.randn(
-        (args.num_frames, 4, args.height // 8, args.width // 8),
+        (1, 4, args.num_frames, args.height // 8, args.width // 8),
         device=device, dtype=unet.dtype,
     )
     latents = latents * scheduler.init_noise_sigma
