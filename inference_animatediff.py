@@ -4,7 +4,7 @@ from contextlib import nullcontext
 import torch
 import numpy as np
 from PIL import Image
-from diffusers import AutoencoderKL, DDIMScheduler   # ← DDIMScheduler, NOT DDPM
+from diffusers import AutoencoderKL, EulerDiscreteScheduler # ← DDIMScheduler, NOT DDPM
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 from tqdm import tqdm
 
@@ -190,7 +190,7 @@ def main(args):
         torch.float32
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae",
-        torch_dtype=dtype,
+        torch_dtype=torch.float32,
     )
     vae.requires_grad_(False).to(device)
 
@@ -243,7 +243,7 @@ def main(args):
 
     # 6. DDIM scheduler — works correctly at 50 inference steps (DDPM does NOT)
     print("Loading DDIMScheduler...")
-    scheduler = DDIMScheduler.from_pretrained(
+    scheduler = EulerDiscreteScheduler.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="scheduler"
     )
     scheduler.set_timesteps(args.num_inference_steps, device=device)
